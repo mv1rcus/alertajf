@@ -45,7 +45,7 @@ function Index() {
       <div className="bg-alert px-4 py-2 text-alert-foreground">
         <div className="mx-auto flex max-w-7xl items-center gap-3 text-sm">
           <span className="shrink-0 rounded bg-alert-foreground px-2 py-0.5 text-xs font-bold text-alert">⚠ DEFESA CIVIL · 40199</span>
-          <p className="truncate"><b>{alertas[i].quando}:</b> {alertas[i].texto}</p>
+          <p className="truncate"><b>{alertas[i]?.quando}:</b> {alertas[i]?.texto}</p>
         </div>
       </div>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
