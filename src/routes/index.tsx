@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { pontosCriticos, alertas, type Ponto } from "@/lib/pontos";
 
+import AutoAlert from "@/components/AutoAlert";
+
 const RainMap = lazy(() => import("@/components/RainMap"));
 
 export const Route = createFileRoute("/")({
@@ -48,6 +50,7 @@ function Index() {
           <p className="truncate"><b>{alertas[i]?.quando}:</b> {alertas[i]?.texto}</p>
         </div>
       </div>
+      {mounted && <AutoAlert />}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <h1 className="font-display text-2xl font-bold">Alerta <span className="text-primary">JF</span> <span className="text-sm font-normal text-muted-foreground">Chuvas em tempo real · Juiz de Fora (MG)</span></h1>
         <div className="flex gap-2">
