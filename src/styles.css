@@ -163,3 +163,44 @@
     color: var(--color-foreground);
   }
 }
+
+/* Central de controle: tema escuro */
+:root {
+  --background: oklch(0.16 0.02 250);
+  --foreground: oklch(0.96 0.01 250);
+  --card: oklch(0.21 0.025 250 / 0.92);
+  --card-foreground: oklch(0.96 0.01 250);
+  --popover: oklch(0.21 0.025 250);
+  --popover-foreground: oklch(0.96 0.01 250);
+  --primary: oklch(0.78 0.15 200);
+  --primary-foreground: oklch(0.16 0.02 250);
+  --secondary: oklch(0.27 0.03 250);
+  --secondary-foreground: oklch(0.96 0.01 250);
+  --muted: oklch(0.27 0.03 250);
+  --muted-foreground: oklch(0.7 0.03 250);
+  --accent: oklch(0.3 0.04 250);
+  --accent-foreground: oklch(0.96 0.01 250);
+  --destructive: oklch(0.63 0.23 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.78 0.15 200);
+  --alert: oklch(0.6 0.22 28);
+  --warning: oklch(0.82 0.17 80);
+  --flood: oklch(0.68 0.17 245);
+  --slide: oklch(0.75 0.17 65);
+  --report: oklch(0.68 0.2 300);
+}
+@theme inline {
+  --color-flood: var(--flood);
+  --color-slide: var(--slide);
+  --color-report: var(--report);
+}
+
+.pin { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 9999px; font-size: 18px; border: 2px solid oklch(1 0 0 / 0.85); box-shadow: 0 4px 14px oklch(0 0 0 / 0.5); }
+.pin::after { content: ""; position: absolute; inset: -2px; border-radius: 9999px; background: inherit; z-index: -1; animation: pin-pulse 1.8s ease-out infinite; }
+@keyframes pin-pulse { 0% { transform: scale(1); opacity: .7 } 100% { transform: scale(2.4); opacity: 0 } }
+.leaflet-container { background: var(--background); font-family: var(--font-sans); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--popover); color: var(--popover-foreground); }
+.leaflet-control-attribution { background: oklch(0 0 0 / 0.5) !important; color: var(--muted-foreground) !important; font-size: 9px; }
+.leaflet-control-attribution a { color: var(--primary) !important; }
