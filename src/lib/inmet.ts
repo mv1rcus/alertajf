@@ -34,27 +34,28 @@ function dataBr(s: unknown): string {
 
 /** Avisos oficiais do INMET (hoje e próximos dias) que valem para Juiz de Fora. */
 export async function buscarAvisos(): Promise<Aviso[]> {
-  const r = await fetch(URL_AVISOS);
+  const r = await fetch(URL_AVISOS, { signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error(`INMET ${r.status}`);
   const d = (await r.json()) as { hoje?: Bruto[]; futuro?: Bruto[] };
+  if (!Array.isArray(d.hoje) || !Array.isArray(d.futuro)) throw new Error("Resposta INMET inválida");
   const vistos = new Set<string>();
   const lista: Aviso[] = [];
   for (const a of [...(d.hoje ?? []), ...(d.futuro ?? [])]) {
-    const geocodes = String(a.geocodes ?? "").split(",").map((x) => x.trim());
+    const geocodes = String(a["geocodes"] ?? "").split(",").map((x) => x.trim());
     if (!geocodes.includes(GEOCODE_JF)) continue;
-    if (String(a.encerrado).toLowerCase() === "true") continue;
-    const id = String(a.id_aviso ?? a.id);
+    if (String(a["encerrado"]).toLowerCase() === "true") continue;
+    const id = String(a["id_aviso"] ?? a["id"]);
     if (vistos.has(id)) continue;
     vistos.add(id);
     lista.push({
       id,
-      descricao: String(a.descricao ?? "Aviso"),
-      severidade: String(a.severidade ?? ""),
-      cor: String(a.aviso_cor ?? "#FFFE00"),
-      inicio: dataBr(a.inicio),
-      fim: dataBr(a.fim),
-      riscos: itens(a.riscos).join(" "),
-      instrucoes: itens(a.instrucoes),
+      descricao: String(a["descricao"] ?? "Aviso"),
+      severidade: String(a["severidade"] ?? ""),
+      cor: String(a["aviso_cor"] ?? "#FFFE00"),
+      inicio: dataBr(a["inicio"]),
+      fim: dataBr(a["fim"]),
+      riscos: itens(a["riscos"]).join(" "),
+      instrucoes: itens(a["instrucoes"]),
     });
   }
   return lista;
@@ -72,7 +73,7 @@ export function useAvisos() {
     const go = () =>
       buscarAvisos()
         .then((l) => { if (!vivo) return; setAvisos(l); setStatus("ok"); setAtualizado(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })); })
-        .catch(() => { if (vivo) setStatus((s) => (s === "ok" ? s : "erro")); });
+        .catch(() => { if (vivo) { setStatus("erro"); setAvisos([]); } });
     go();
     const t = setInterval(go, 10 * 60 * 1000);
     return () => { vivo = false; clearInterval(t); };

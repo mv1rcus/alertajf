@@ -1,134 +1,131 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { pontosCriticos, type Ponto } from "@/lib/pontos";
+import { CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw } from "lucide-react";
 import { useAvisos } from "@/lib/inmet";
-
-import AutoAlert from "@/components/AutoAlert";
-import RiverLevel from "@/components/RiverLevel";
+import type { Ponto } from "@/lib/pontos";
 
 const RainMap = lazy(() => import("@/components/RainMap"));
+export const Route = createFileRoute("/")({ head: () => ({ meta: [
+  { title: "Alerta JF | Chuva e relatos da cidade" },
+  { name: "description", content: "Previsão de chuva para Juiz de Fora, avisos do INMET e relatos de ocorrências. Projeto independente, não substitui a Defesa Civil." },
+] }), component: Index });
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
-      { name: "description", content: "Mapa em tempo real de alagamentos, vias interditadas e áreas de risco em Juiz de Fora (MG), com avisos oficiais do INMET." },
-      { property: "og:title", content: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
-      { property: "og:description", content: "Mapa de chuvas, alagamentos e avisos oficiais do INMET em Juiz de Fora." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: Index,
-});
-
-const rotulo: Record<Ponto["tipo"], string> = { alagamento: "Alagamento", interdicao: "Via interditada", deslizamento: "Risco de deslizamento", relato: "Relato de cidadão" };
+type Hour = { time: string; mm: number; probability: number };
+type Forecast = { hours: Hour[]; fetchedAt: number };
+type Report = { id: string; street: string; neighborhood: string; kind: "alagamento" | "interdicao" | "deslizamento"; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: "approved"; source: "citizen" | "official" };
+const API = (import.meta.env["VITE_REPORTS_API_URL"] || "").replace(/\/$/, "");
+const labels = { alagamento: "Alagamento", interdicao: "Interdição", deslizamento: "Deslizamento" };
+const clock = (date: string | number) => new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+const dateTime = (date: string) => new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+function validLocation(lat: number, lng: number) { return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -22.1 && lat <= -21.3 && lng >= -43.9 && lng <= -42.9; }
+function validReport(x: Report) { return x && typeof x.id === "string" && typeof x.street === "string" && typeof x.neighborhood === "string" && typeof x.description === "string" && x.kind in labels && x.status === "approved" && ["citizen", "official"].includes(x.source) && validLocation(x.lat, x.lng) && Number.isFinite(Date.parse(x.observed_at)) && Date.parse(x.observed_at) <= Date.now() + 60000 && Date.parse(x.expires_at) > Date.now(); }
 
 function Index() {
+  const { avisos, status: officialStatus, atualizado } = useAvisos();
   const [mounted, setMounted] = useState(false);
-  const [pontos, setPontos] = useState<Ponto[]>(pontosCriticos);
-  const [radar, setRadar] = useState(true);
-  const [foco, setFoco] = useState<Ponto | null>(null);
-  const [form, setForm] = useState(false);
-  const [i, setI] = useState(0);
-  const { avisos, status, atualizado } = useAvisos();
-  useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { if (avisos.length < 2) return; const t = setInterval(() => setI((x) => (x + 1) % avisos.length), 6000); return () => clearInterval(t); }, [avisos.length]);
-  const aviso = avisos[i % Math.max(avisos.length, 1)];
-
-  function reportar(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const local = String(fd.get("local"));
-    const add = (lat: number, lng: number) => {
-      const p: Ponto = { id: crypto.randomUUID(), nome: local, tipo: "relato", descricao: String(fd.get("desc") || "Alagamento relatado"), lat, lng };
-      setPontos((ps) => [...ps, p]); setFoco(p); setForm(false);
-    };
-    navigator.geolocation?.getCurrentPosition((pos) => add(pos.coords.latitude, pos.coords.longitude), () => add(-21.7642 + (Math.random() - 0.5) * 0.02, -43.3503 + (Math.random() - 0.5) * 0.02), { timeout: 5000 });
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [weatherError, setWeatherError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reportsStatus, setReportsStatus] = useState("loading");
+  const [reportsAt, setReportsAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [radar, setRadar] = useState(false);
+  const [focus, setFocus] = useState<Ponto | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationNote, setLocationNote] = useState("");
+  const [submission, setSubmission] = useState("");
+  const [sending, setSending] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => { setMounted(true); const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    let alive = true;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503&hourly=precipitation,precipitation_probability&forecast_days=2&timezone=America%2FSao_Paulo", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
+        if (!response.ok) throw Error("forecast");
+        const data = await response.json();
+        if (!Array.isArray(data.hourly?.time)) throw Error("forecast");
+        const hours: Hour[] = data.hourly.time.map((t: string, i: number) => ({ time: `${t}-03:00`, mm: data.hourly.precipitation?.[i], probability: data.hourly.precipitation_probability?.[i] })).filter((h: Hour) => Date.parse(h.time) + 3600000 > Date.now()).slice(0, 12);
+        if (hours.length < 6 || hours.some(h => !Number.isFinite(h.mm) || h.mm < 0 || !Number.isFinite(h.probability) || h.probability < 0 || h.probability > 100)) throw Error("forecast");
+        if (alive) { setForecast({ hours, fetchedAt: Date.now() }); setWeatherError(false); }
+      } catch { if (alive) setWeatherError(true); }
+      finally { if (alive) setLoading(false); }
+    }
+    void load(); const interval = setInterval(load, 15 * 60000);
+    return () => { alive = false; controller.abort(); clearInterval(interval); };
+  }, [refresh]);
+  useEffect(() => {
+    if (!API) { setReportsStatus("unconfigured"); return; }
+    let alive = true;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const r = await fetch(`${API}/reports`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
+        if (!r.ok) throw Error("reports");
+        const d = await r.json();
+        if (!Array.isArray(d.reports)) throw Error("reports");
+        if (alive) { setReports(d.reports.filter(validReport)); setReportsStatus("ready"); setReportsAt(Date.now()); }
+      } catch { if (alive) setReportsStatus("error"); }
+    }
+    void load(); const interval = setInterval(load, 60000);
+    return () => { alive = false; controller.abort(); clearInterval(interval); };
+  }, [refresh]);
+  const weatherStale = !forecast || weatherError || now - forecast.fetchedAt > 30 * 60000;
+  const hours = forecast?.hours.filter(h => Date.parse(h.time) + 3600000 > now) || [];
+  const wet = hours.find(h => h.mm >= 0.1);
+  const liveReports = reports.filter(r => Date.parse(r.expires_at) > now);
+  const visibleReports = liveReports.filter(r => (kind === "all" || r.kind === kind) && `${r.street} ${r.neighborhood}`.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR")));
+  const toPoint = (r: Report): Ponto => ({ id: r.id, nome: r.street, descricao: `${labels[r.kind]} · ${dateTime(r.observed_at)} · ${r.source === "official" ? "Fonte oficial" : "Relato de morador, revisado"}`, lat: r.lat, lng: r.lng, tipo: r.kind });
+  function gps() {
+    setLocationNote("Buscando sua localização…");
+    if (!navigator.geolocation) { setLocationNote("GPS indisponível. Escolha o ponto no mapa."); return; }
+    navigator.geolocation.getCurrentPosition(p => {
+      if (!validLocation(p.coords.latitude, p.coords.longitude)) { setLocationNote("Localização fora da região. Escolha a ocorrência no mapa."); return; }
+      setLocation({ lat: p.coords.latitude, lng: p.coords.longitude }); setLocationNote("Confira se o ponto corresponde à ocorrência, não apenas a onde você está.");
+    }, () => setLocationNote("Não foi possível obter o GPS. Toque no mapa para escolher o local."), { timeout: 10000, maximumAge: 0 });
   }
-
-  const [painel, setPainel] = useState(false);
-  const cores: Record<Ponto["tipo"], string> = { alagamento: "bg-flood", interdicao: "bg-destructive", deslizamento: "bg-slide", relato: "bg-report" };
-
-  return (
-    <div className="relative h-dvh w-full overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0">
-        {mounted && <Suspense fallback={null}><RainMap pontos={pontos} showRadar={radar} foco={foco} /></Suspense>}
-      </div>
-
-      {/* Topo flutuante */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] space-y-2 p-3">
-        <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border bg-card px-3 py-2 shadow-xl md:max-w-xl">
-          <div className="font-display text-lg leading-none">Alerta<span className="text-primary">JF</span></div>
-          <div className="h-6 w-px bg-border" />
-          <p className="min-w-0 flex-1 truncate text-xs"><span className="mr-1 rounded bg-alert px-1.5 py-0.5 font-bold text-alert-foreground">INMET</span>{aviso ? `${aviso.descricao} (${aviso.severidade}) até ${aviso.fim}` : status === "carregando" ? "Buscando avisos oficiais…" : status === "erro" ? "Não foi possível consultar o INMET agora" : "Nenhum aviso do INMET ativo para Juiz de Fora"}</p>
-        </div>
-        {mounted && <AutoAlert />}
-        {mounted && <RiverLevel />}
-      </div>
-
-      {/* Botões de emergência */}
-      <div className="absolute right-3 top-48 z-[1000] flex flex-col gap-2 md:top-40">
-        <a href="tel:199" aria-label="Ligar Defesa Civil 199" className="grid h-14 w-14 place-items-center rounded-full bg-warning text-warning-foreground shadow-xl"><span className="text-center text-[10px] font-bold leading-tight">📞<br/>199</span></a>
-        <a href="tel:193" aria-label="Ligar Bombeiros 193" className="grid h-14 w-14 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-xl"><span className="text-center text-[10px] font-bold leading-tight">🚒<br/>193</span></a>
-        <button onClick={() => setRadar(!radar)} aria-label="Ligar ou desligar chuva no mapa" className={`grid h-14 w-14 place-items-center rounded-full border shadow-xl ${radar ? "bg-primary text-primary-foreground" : "bg-card"}`}><span className="text-center text-[10px] font-bold leading-tight">🌧<br/>Radar</span></button>
-      </div>
-
-      {/* Painel deslizante */}
-      <section className={`absolute inset-x-0 bottom-0 z-[1001] flex max-h-[75dvh] flex-col rounded-t-3xl border-t bg-card shadow-2xl transition-transform duration-300 md:inset-x-auto md:bottom-3 md:left-3 md:w-96 md:rounded-3xl md:border ${painel ? "translate-y-0" : "translate-y-[calc(100%-9.5rem)] md:translate-y-[calc(100%-9.5rem)]"}`}>
-        <button onClick={() => setPainel(!painel)} className="flex flex-col items-center pt-2" aria-label="Abrir ou fechar painel">
-          <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
-        </button>
-        <div className="flex items-center gap-2 px-4 pb-3 pt-2">
-          <button onClick={() => setPainel(!painel)} className="flex-1 text-left">
-            <div className="font-display text-base">{pontos.length} pontos críticos</div>
-            <div className="text-xs text-muted-foreground">{painel ? "Toque para fechar" : "Toque para ver a lista e os avisos"}</div>
-          </button>
-          <button onClick={() => { setForm(true); setPainel(true); }} className="rounded-full bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-lg">+ Reportar</button>
-        </div>
-        <div className="flex gap-3 overflow-x-auto px-4 pb-3 text-[11px] text-muted-foreground">
-          {(Object.keys(rotulo) as Ponto["tipo"][]).map((t) => <span key={t} className="flex shrink-0 items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-full ${cores[t]}`} />{rotulo[t]}</span>)}
-        </div>
-        <div className="flex-1 space-y-5 overflow-y-auto border-t px-4 py-4">
-          {form && (
-            <form onSubmit={reportar} className="space-y-2 rounded-2xl border bg-secondary p-3">
-              <div className="text-sm font-semibold">Reportar alagamento</div>
-              <input name="local" required placeholder="Rua / bairro" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              <textarea name="desc" placeholder="O que está acontecendo?" className="w-full rounded-lg border bg-background px-3 py-2 text-sm" />
-              <div className="flex gap-2">
-                <button className="flex-1 rounded-lg bg-primary py-2 text-sm font-bold text-primary-foreground">Enviar com minha localização</button>
-                <button type="button" onClick={() => setForm(false)} className="rounded-lg border px-3 text-sm">Cancelar</button>
-              </div>
-            </form>
-          )}
-          <ul className="space-y-2">
-            {pontos.map((p) => (
-              <li key={p.id}>
-                <button onClick={() => { setFoco(p); setPainel(false); }} className="flex w-full items-start gap-3 rounded-xl bg-secondary p-3 text-left hover:bg-accent">
-                  <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${cores[p.tipo]}`} />
-                  <span><span className="block font-semibold">{p.nome}</span><span className="block text-xs text-muted-foreground">{rotulo[p.tipo]} · {p.descricao}</span></span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <div>
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Avisos oficiais (INMET)</h2>
-            {avisos.length === 0 && <p className="mb-2 rounded-xl border-l-4 border-muted-foreground bg-secondary p-3 text-xs">{status === "carregando" ? "Buscando avisos oficiais…" : status === "erro" ? "Não foi possível consultar o INMET agora. Veja os avisos em portal.inmet.gov.br/avisos ou ligue 199." : "Nenhum aviso do INMET ativo para Juiz de Fora neste momento."}</p>}
-            {avisos.map((a) => (
-              <div key={a.id} className="mb-2 rounded-xl border-l-4 bg-secondary p-3 text-xs" style={{ borderLeftColor: a.cor }}>
-                <p><b>{a.descricao}</b> · {a.severidade}</p>
-                <p className="text-muted-foreground">De {a.inicio} até {a.fim}</p>
-                {a.riscos && <p className="mt-1">{a.riscos}</p>}
-                {a.instrucoes.length > 0 && <ul className="mt-1 list-disc pl-4 text-muted-foreground">{a.instrucoes.map((t) => <li key={t}>{t}</li>)}</ul>}
-              </div>
-            ))}
-            {atualizado && <p className="text-[10px] text-muted-foreground">Fonte: INMET (avisos meteorológicos). Atualizado às {atualizado}.</p>}
-          </div>
-          <p className="rounded-xl border bg-secondary p-3 text-[11px] leading-snug text-muted-foreground">
-            Projeto independente, não oficial e sem ligação com a Prefeitura, a Defesa Civil ou o INMET. Os pontos críticos do mapa são exemplos. Em emergência, ligue 199 (Defesa Civil) ou 193 (Bombeiros).
-          </p>
-        </div>
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); if (!API || !location || sending) return;
+    const form = e.currentTarget; const fd = new FormData(form);
+    const observed = new Date(`${fd.get("observed_at")}:00-03:00`);
+    if (!Number.isFinite(observed.getTime()) || observed.getTime() > Date.now() + 60000 || Date.now() - observed.getTime() > 2 * 3600000) { setSubmission("Informe uma observação das últimas 2 horas, sem horário futuro."); return; }
+    setSending(true); setSubmission("");
+    try {
+      const r = await fetch(`${API}/reports`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000), body: JSON.stringify({ street: fd.get("street"), neighborhood: fd.get("neighborhood"), kind: fd.get("kind"), description: fd.get("description"), observed_at: observed.toISOString(), ...location, website: fd.get("website") }) });
+      if (r.status !== 202) throw Error("submit");
+      setSubmission("Relato recebido para análise. Ele só aparece para todos após aprovação da moderação. Não é um chamado de emergência."); form.reset(); setLocation(null);
+    } catch { setSubmission("Não foi possível confirmar o envio. Seu relato não foi publicado. Tente mais tarde."); }
+    finally { setSending(false); }
+  }
+  return <div className="ajf">
+    <style>{styles}</style>
+    <a className="skip" href="#main">Pular para o conteúdo</a>
+    <header className="top"><a href="/" className="brand"><span className="brand-icon"><CloudRain size={24}/></span>Alerta<span>JF</span><small>JUIZ DE FORA · MG</small></a><nav><a href="#previsao">Previsão</a><a href="#ocorrencias">Ruas e relatos</a><a href="tel:199" className="emergency">Emergência <b>199</b><ArrowUpRight size={15}/></a></nav></header>
+    <main id="main">
+      <div className="eyebrow">INFORMAÇÃO PARA CUIDAR DA CIDADE</div>
+      <section className="intro"><div><h1>O tempo muda.<br/><span>Fique por dentro.</span></h1><p>Previsão de chuva e informações das ruas de Juiz de Fora, em um só lugar.</p></div><div className="independent"><ShieldCheck size={21}/><span>Projeto independente<br/><small>Não substitui os canais oficiais.</small></span></div></section>
+      <section id="previsao" className="weather card" aria-labelledby="forecast-title">
+        <div className="weather-summary"><div className="eyebrow">PREVISÃO · PRÓXIMAS HORAS</div><CloudRain size={42} strokeWidth={1.4}/><h2 id="forecast-title">{loading ? "Consultando a previsão" : weatherStale ? "Previsão indisponível" : wet ? `Chuva prevista na faixa das ${clock(wet.time)}` : "Pouca chuva prevista nas próximas horas"}</h2><p>{weatherStale ? "Não há dados recentes suficientes. Isso não significa ausência de chuva ou de risco." : "Estimativa para a cidade. Pode chover em um bairro e não em outro."}</p><small><Clock3 size={13}/>{forecast ? `Consulta às ${clock(forecast.fetchedAt)}${weatherStale ? " · dados sem validade atual" : ""}` : "Aguardando dados"}</small></div>
+        <div className="hours-panel"><div className="section-line"><b>Chuva hora a hora</b><button className="text-btn" onClick={() => { setLoading(true); setRefresh(r => r + 1); }} disabled={loading}><RefreshCw size={14}/>Atualizar</button></div>{!weatherStale ? <div className="hours">{hours.map(h => <div className="hour" key={h.time}><b>{clock(h.time)}</b><CloudRain size={23} color={h.mm > 0 ? "#127e86" : "#8e9ba4"}/><strong>{h.probability}%</strong><span>{h.mm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mm</span></div>)}</div> : <div className="weather-empty">{loading ? "Carregando previsão…" : "Tente atualizar em alguns instantes. Consulte também os avisos oficiais abaixo."}</div>}<p className="caption">Probabilidade (%) e volume previsto por hora (mm). Previsão por modelos, não medição na sua rua. <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Dados: Open-Meteo</a>.</p></div>
       </section>
-    </div>
-  );
+      <section className="official card" aria-label="Avisos oficiais do INMET"><div className="official-label"><ShieldCheck size={20}/><b>Avisos oficiais</b><span>INMET</span></div>{officialStatus === "carregando" ? <p>Consultando o INMET…</p> : officialStatus === "erro" ? <p>Não foi possível consultar os avisos. <a href="https://portal.inmet.gov.br/avisos" target="_blank" rel="noreferrer">Consultar no INMET ↗</a></p> : avisos.length === 0 ? <p>Nenhum aviso ativo encontrado para JF. Isso não garante ausência de risco.</p> : <div className="official-list">{avisos.map(a => <details key={a.id}><summary>{a.descricao} · {a.severidade}<span>Ver orientações +</span></summary><p>De {a.inicio} até {a.fim}.</p>{a.riscos && <p>{a.riscos}</p>}<ul>{a.instrucoes.map((t, i) => <li key={i}>{t}</li>)}</ul></details>)}</div>}{atualizado && <small>Consulta: {atualizado}</small>}</section>
+      <section id="ocorrencias" className="streets"><div className="section-heading"><div><div className="eyebrow">INFORMAÇÃO DA COMUNIDADE</div><h2>Como estão as ruas?</h2><p>Ocorrências recentes, com origem e horário. Confira antes de sair.</p></div><button className="primary" onClick={() => { setShowForm(!showForm); setSubmission(""); }}><Plus size={18}/>Relatar ocorrência</button></div>
+      {!API && <div className="notice"><b>Relatos da comunidade em preparação.</b> O banco compartilhado e a moderação ainda não foram ativados. Nenhuma rua é apresentada como alagada sem um relato real.</div>}
+      {showForm && <section className="report-form card" aria-label="Novo relato"><div className="section-line"><h3>Onde está a ocorrência?</h3><button aria-label="Fechar formulário" className="text-btn" onClick={() => setShowForm(false)}><X/></button></div>{!API ? <p>Envio ainda indisponível. Esta função será liberada após configurar o banco e os responsáveis pela análise. Para emergências, ligue 199 ou 193.</p> : <form onSubmit={submit}><p>Não se coloque em risco para enviar um relato. Ele passará por moderação antes de aparecer.</p><div className="form-grid"><label>Rua ou referência<input name="street" required maxLength={120}/></label><label>Bairro<input name="neighborhood" required maxLength={80}/></label><label>Tipo<select name="kind">{Object.entries(labels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>Quando você viu? (horário de JF)<input name="observed_at" type="datetime-local" required/></label></div><label>O que você observou?<textarea name="description" required minLength={10} maxLength={600} placeholder="Descreva a situação sem nomes, telefones ou dados pessoais."/></label><label className="trap" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off"/></label><button type="button" className="secondary" onClick={gps}><Navigation size={15}/>Usar meu GPS</button><p className="caption">Ou toque no mapa abaixo para marcar a ocorrência. {location ? `Ponto: ${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : "Nenhum ponto selecionado."} {locationNote}</p><label className="check"><input type="checkbox" required/>Confirmo o local e sei que este relato será público após moderação.</label><button className="primary" disabled={!location || sending}>{sending ? "Enviando…" : "Enviar para análise"}</button><p role="status">{submission}</p></form>}</section>}
+      <div className="street-grid"><div className="map-card card"><div className="section-line map-heading"><b><MapPin size={17}/>Mapa de ocorrências</b><label className="radar-toggle"><input type="checkbox" checked={radar} onChange={e => setRadar(e.target.checked)}/>Radar passado</label></div><div className="map-area">{mounted && <Suspense fallback={<p>Carregando mapa…</p>}><RainMap pontos={reportsStatus === "ready" ? visibleReports.map(toPoint) : []} showRadar={radar} foco={focus} onPick={showForm && !!API ? (lat, lng) => { if (validLocation(lat, lng)) { setLocation({ lat, lng }); setLocationNote("Confira a rua e o ponto antes de enviar."); } } : undefined} selected={location}/></Suspense>}</div><p className="caption map-caption">{showForm && API ? "Toque no local da ocorrência para marcar. " : ""}Sem marcadores não significa caminho seguro. Nunca atravesse uma área alagada.</p></div>
+      <div className="report-list card"><div className="section-line"><h3>Relatos recentes</h3><span className="count">{reportsStatus === "ready" ? visibleReports.length : "—"}</span></div><label className="sr-label" htmlFor="search">Buscar rua ou bairro</label><input id="search" type="search" placeholder="Buscar rua ou bairro" value={query} onChange={e => setQuery(e.target.value)}/><label className="sr-label" htmlFor="kind">Filtrar tipo</label><select id="kind" value={kind} onChange={e => setKind(e.target.value)}><option value="all">Todos os tipos</option>{Object.entries(labels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>{reportsStatus !== "ready" ? <div className="empty"><MapPin size={30}/><b>{reportsStatus === "unconfigured" ? "Ainda sem relatos compartilhados" : reportsStatus === "error" ? "Relatos indisponíveis" : "Consultando relatos…"}</b><p>{reportsStatus === "error" ? "A consulta falhou. Não é possível afirmar quais ruas estão livres." : "Quando o serviço estiver ativo, os relatos aprovados aparecerão aqui."}</p></div> : visibleReports.length === 0 ? <div className="empty"><ShieldCheck size={30}/><b>Nenhum relato recente encontrado</b><p>Isso não confirma que as ruas estão livres de alagamento.</p></div> : <ul className="incidents">{visibleReports.map(r => <li key={r.id}><button onClick={() => setFocus(toPoint(r))}><span className="incident-kind">{labels[r.kind]}</span><b>{r.street}</b><span>{r.neighborhood}</span><p>{r.description}</p><small>{r.source === "official" ? "Fonte oficial" : "Relato de morador · revisado"}<br/>Observado em {dateTime(r.observed_at)}<br/>Válido até {clock(r.expires_at)}</small></button></li>)}</ul>}{reportsAt && <p className="caption">Consulta às {clock(reportsAt)}. Relatos vencidos saem automaticamente da lista.</p>}</div></div></section>
+      <section className="help"><div><ShieldCheck size={25}/><div><h3>Receba os alertas da Defesa Civil</h3><p>Envie seu CEP por SMS para <b>40199</b>. O cadastro é gratuito.</p></div></div><a href="https://www.gov.br/pt-br/servicos/solicitar-cadastro-para-recebimento-de-avisos-e-alertas-de-desastres" target="_blank" rel="noreferrer">Como se cadastrar <ArrowUpRight size={16}/></a></section>
+      <footer><div className="brand">Alerta<span>JF</span></div><p>Projeto independente, sem vínculo com Prefeitura, Defesa Civil ou INMET.<br/>Previsões e relatos podem falhar ou atrasar. Em perigo, busque um local seguro e os canais oficiais.</p><div><a href="tel:199">Defesa Civil <b>199</b></a><a href="tel:193">Bombeiros <b>193</b></a></div></footer>
+    </main>
+  </div>;
 }
+
+const styles = `
+.ajf{background:#f5f7f8;color:#192e3c;min-height:100vh;font:15px/1.55 'Archivo',Arial,sans-serif;--teal:#127e86}.ajf *{box-sizing:border-box}.ajf a{color:inherit}.ajf button,.ajf input,.ajf select,.ajf textarea{font:inherit}.ajf button,.ajf summary{cursor:pointer}.ajf button:disabled{opacity:.55;cursor:not-allowed}.ajf button:focus-visible,.ajf a:focus-visible,.ajf input:focus-visible,.ajf select:focus-visible,.ajf textarea:focus-visible,.ajf summary:focus-visible{outline:3px solid #127e86;outline-offset:3px}.ajf .skip{position:absolute;left:12px;top:-60px;background:white;padding:12px;z-index:9999}.ajf .skip:focus{top:10px}.ajf .top{height:88px;background:white;border-bottom:1px solid #e1e7eb;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100% - 1180px)/2));gap:24px}.ajf .brand{display:flex;align-items:center;gap:0;font-size:23px;font-weight:700;text-decoration:none;white-space:nowrap;letter-spacing:-1px}.ajf .brand>span:not(.brand-icon){color:var(--teal)}.ajf .brand-icon{display:grid;place-items:center;background:#e9f5f3;color:var(--teal);height:44px;width:44px;border-radius:13px;margin-right:10px}.ajf .brand small{font-size:10px;letter-spacing:1.5px;margin-left:23px;padding-left:23px;border-left:1px solid #d8e2e7;color:#687985}.ajf nav{display:flex;align-items:center;gap:26px;font-size:13px}.ajf nav a{text-decoration:none}.ajf .emergency{display:flex;gap:6px;align-items:center;background:#fff1ec;color:#a84225;padding:10px 14px;border-radius:9px}.ajf main{max-width:1180px;margin:auto;padding:42px 0 0}.ajf .eyebrow{font-size:10px;letter-spacing:1.8px;font-weight:700;color:#537580}.ajf .intro{display:flex;justify-content:space-between;align-items:center;margin:13px 0 30px}.ajf h1{font-size:48px;line-height:1.12;letter-spacing:-2px;font-weight:600;margin:0 0 17px}.ajf h1 span{color:var(--teal)}.ajf p{margin:8px 0;color:#607380}.ajf .intro p{max-width:520px;font-size:15px}.ajf .independent{display:flex;align-items:center;gap:12px;font-size:12px;color:#405d68;background:#edf1f3;padding:14px 18px;border-radius:12px}.ajf .independent small{color:#6c7e88;font-size:11px}.ajf .card{background:white;border:1px solid #dfe7eb;border-radius:17px;overflow:hidden;box-shadow:0 3px 8px #21384a03}.ajf .weather{display:grid;grid-template-columns:340px 1fr}.ajf .weather-summary{background:#e7f3f2;padding:26px 28px;display:flex;align-items:flex-start;flex-direction:column}.ajf .weather-summary>svg{color:var(--teal);margin-top:20px}.ajf .weather-summary h2{font-size:25px;line-height:1.25;font-weight:600;margin:13px 0 7px;letter-spacing:-.6px}.ajf .weather-summary p{font-size:12px;line-height:1.6}.ajf .weather-summary small{display:flex;gap:6px;align-items:center;margin-top:16px;font-size:10px;color:#4d7478}.ajf .hours-panel{padding:25px;min-width:0}.ajf .section-line{display:flex;align-items:center;justify-content:space-between;gap:12px}.ajf .section-line>b{display:flex;align-items:center;gap:7px;font-size:13px}.ajf .text-btn{background:none;border:0;color:var(--teal);display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:6px}.ajf .hours{display:flex;overflow-x:auto;margin:30px 0 24px;gap:5px;padding-bottom:14px}.ajf .hour{min-width:72px;display:flex;align-items:center;flex-direction:column;gap:10px;padding:13px 7px;border-radius:11px;background:#f7f9fa}.ajf .hour b{font-size:11px;color:#526976}.ajf .hour strong{font-size:17px;font-weight:600}.ajf .hour span{font-size:11px;color:#6d808b}.ajf .caption{font-size:10px;line-height:1.7;color:#6c7d88}.ajf .caption a{text-decoration:underline}.ajf .weather-empty{padding:55px 22px;font-size:14px;color:#6c7d88;text-align:center}.ajf .official{display:flex;align-items:flex-start;gap:20px;padding:19px 23px;margin-top:16px;font-size:12px}.ajf .official-label{display:flex;align-items:center;gap:8px;flex-shrink:0;color:#476575}.ajf .official-label span{font-size:9px;padding:2px 6px;background:#ecf0f3;border-radius:4px}.ajf .official p{margin:0}.ajf .official>a,.ajf .official a{color:var(--teal);text-decoration:underline}.ajf .official>small{margin-left:auto;white-space:nowrap;font-size:9px;color:#73838e}.ajf .official-list{flex:1}.ajf details+details{margin-top:10px}.ajf summary{font-weight:600}.ajf summary span{font-size:10px;font-weight:400;float:right;margin-left:12px;color:var(--teal)}.ajf details p,.ajf details ul{margin-top:10px}.ajf .streets{padding-top:44px}.ajf .section-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}.ajf h2{font-size:28px;line-height:1.2;font-weight:600;letter-spacing:-.8px;margin:9px 0}.ajf .section-heading p{font-size:12px}.ajf .primary,.ajf .secondary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 17px;border:0;border-radius:9px;font-size:12px;font-weight:600;background:var(--teal);color:white}.ajf .secondary{background:#edf5f5;color:var(--teal)}.ajf .notice{background:#fff7e6;color:#826329;border:1px solid #f0e0ba;border-radius:11px;padding:13px 17px;font-size:12px;margin-bottom:18px}.ajf .notice b{font-weight:600}.ajf .street-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px}.ajf .map-heading{padding:17px 20px}.ajf .radar-toggle{display:flex;align-items:center;gap:6px;color:#637b87;font-size:11px}.ajf input[type=checkbox]{accent-color:var(--teal)}.ajf .map-area{height:420px;position:relative;background:#e9eff1}.ajf .map-caption{padding:2px 19px 10px}.ajf .report-list{padding:20px}.ajf h3{font-size:15px;font-weight:600;margin:0}.ajf .count{background:#e9f3f2;color:var(--teal);padding:2px 9px;border-radius:20px;font-size:11px}.ajf input:not([type=checkbox]),.ajf textarea,.ajf select{width:100%;background:#f9fbfc;border:1px solid #dce5e9;padding:10px 12px;border-radius:8px;color:#294653;font-size:12px}.ajf .report-list>input{margin-top:17px}.ajf .report-list>select{margin-top:9px}.ajf .empty{padding:45px 10px;text-align:center;display:flex;align-items:center;flex-direction:column;gap:12px}.ajf .empty svg{color:#93aaaF}.ajf .empty b{font-size:13px;max-width:220px}.ajf .empty p{font-size:11px;max-width:230px;margin:0}.ajf .help{display:flex;justify-content:space-between;align-items:center;gap:20px;background:#e9f1f5;border-radius:13px;margin:28px 0 36px;padding:24px}.ajf .help>div{display:flex;align-items:center;gap:15px}.ajf .help svg{color:#547c8e;flex-shrink:0}.ajf .help h3{font-size:14px}.ajf .help p{font-size:12px;margin-bottom:0}.ajf .help a{display:flex;align-items:center;gap:10px;font-size:11px;white-space:nowrap;text-decoration:none}.ajf footer{padding:25px 0 35px;display:flex;justify-content:space-between;gap:25px;align-items:center;border-top:1px solid #dfe7eb}.ajf footer p{font-size:10px;max-width:590px}.ajf footer>div:last-child{display:flex;gap:17px}.ajf footer a{font-size:10px;text-decoration:none;white-space:nowrap}.ajf .report-form{padding:24px;margin-bottom:20px}.ajf .report-form p{font-size:12px}.ajf .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:15px 0}.ajf .report-form label{display:block;font-size:12px}.ajf .report-form label>input,.ajf textarea,.ajf .report-form label>select{margin-top:5px}.ajf textarea{min-height:90px}.ajf .report-form .secondary{margin-top:12px}.ajf .check{margin:14px 0}.ajf .check input{width:auto;margin-right:8px}.ajf .trap{position:absolute;left:-10000px}.ajf .incidents{list-style:none;padding:0;margin:15px 0;max-height:340px;overflow:auto}.ajf .incidents li+li{border-top:1px solid #e2e9ed}.ajf .incidents button{border:0;background:none;text-align:left;padding:14px 0;width:100%;display:flex;flex-direction:column;gap:4px}.ajf .incident-kind{font-size:10px;color:#9a542d;background:#fff2e7;padding:2px 7px;border-radius:4px}.ajf .incidents b{font-size:13px}.ajf .incidents span,.ajf .incidents p,.ajf .incidents small{font-size:10px;color:#667e89}.ajf .sr-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.ajf .leaflet-container{font-family:inherit;background:#e9eff1}.ajf .leaflet-popup-content{font-size:12px}.ajf .leaflet-popup-content p{color:#334e5c}.ajf .pin{display:grid;place-items:center;width:32px;height:32px;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px #0003;color:white}.ajf .radar-status{position:absolute;z-index:500;bottom:25px;left:10px;right:10px;padding:8px 12px;background:#fffffff0;border-radius:8px;font-size:10px;color:#405c69}
+@media(max-width:1240px){.ajf main{margin:0 24px}.ajf .top{padding:0 24px}}@media(max-width:800px){.ajf .brand small{display:none}.ajf .top{height:72px}.ajf nav{gap:14px}.ajf .intro{align-items:flex-start}.ajf .independent{display:none}.ajf h1{font-size:39px}.ajf .weather{grid-template-columns:1fr}.ajf .weather-summary{padding:24px}.ajf .weather-summary>svg{display:none}.ajf .weather-summary h2{font-size:26px;max-width:440px}.ajf .hours-panel{padding:20px}.ajf .hours{margin:18px 0 10px}.ajf .official{flex-direction:column;gap:8px}.ajf .official>small{margin-left:0}.ajf .official-list{width:100%}.ajf .street-grid{grid-template-columns:1fr}.ajf .map-area{height:340px}.ajf .report-list{min-height:270px}.ajf .empty{padding:28px}.ajf footer{flex-wrap:wrap}.ajf .help{align-items:flex-start;flex-direction:column}.ajf .help a{margin-left:40px}}@media(max-width:480px){.ajf main{margin:0 16px;padding-top:27px}.ajf .top{padding:0 16px;gap:10px}.ajf nav>a:not(.emergency){display:none}.ajf .emergency{font-size:11px;padding:8px 10px}.ajf h1{font-size:36px}.ajf .intro{margin-bottom:23px}.ajf .intro p{font-size:13px}.ajf .section-heading{flex-direction:column;align-items:flex-start;gap:8px}.ajf .section-heading .primary{width:100%}.ajf h2{font-size:26px}.ajf .streets{padding-top:31px}.ajf .form-grid{grid-template-columns:1fr}.ajf .report-form{padding:18px}.ajf .map-heading{padding:15px 12px}.ajf .map-heading>b{font-size:11px}.ajf .radar-toggle{font-size:10px}.ajf .map-area{height:320px}.ajf .help{padding:20px}.ajf footer{gap:12px}.ajf footer p{order:3}.ajf .official{padding:17px}.ajf summary span{float:none;display:block;margin-left:0}}
+`;
