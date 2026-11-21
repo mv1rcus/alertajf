@@ -82,7 +82,7 @@ export default function RainMap({ pontos, showRadar, foco }: { pontos: Ponto[]; 
     <div className="relative h-full w-full">
       <div ref={el} className="h-full w-full" />
       {frames && atual && (
-        <div className="absolute right-3 top-28 z-[1000] flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs shadow-lg backdrop-blur">
+        <div className="absolute right-3 top-36 z-[1000] flex items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-xs shadow-lg backdrop-blur">
           <button onClick={() => setPlay(!play)} aria-label={play ? "Pausar radar" : "Animar radar"} className="font-bold text-primary">{play ? "❚❚" : "▶"}</button>
           <span>🌧 {new Date(atual.time * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>

@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { pontosCriticos, alertas, type Ponto } from "@/lib/pontos";
 
 import AutoAlert from "@/components/AutoAlert";
+import RiverLevel from "@/components/RiverLevel";
 
 const RainMap = lazy(() => import("@/components/RainMap"));
 
@@ -59,10 +60,11 @@ function Index() {
           <p className="min-w-0 flex-1 truncate text-xs"><span className="mr-1 rounded bg-alert px-1.5 py-0.5 font-bold text-alert-foreground">40199</span>{alertas[i]?.texto}</p>
         </div>
         {mounted && <AutoAlert />}
+        {mounted && <RiverLevel />}
       </div>
 
       {/* Botões de emergência */}
-      <div className="absolute right-3 top-40 z-[1000] flex flex-col gap-2 md:top-32">
+      <div className="absolute right-3 top-48 z-[1000] flex flex-col gap-2 md:top-40">
         <a href="tel:199" aria-label="Ligar Defesa Civil 199" className="grid h-14 w-14 place-items-center rounded-full bg-warning text-warning-foreground shadow-xl"><span className="text-center text-[10px] font-bold leading-tight">📞<br/>199</span></a>
         <a href="tel:193" aria-label="Ligar Bombeiros 193" className="grid h-14 w-14 place-items-center rounded-full bg-destructive text-destructive-foreground shadow-xl"><span className="text-center text-[10px] font-bold leading-tight">🚒<br/>193</span></a>
         <button onClick={() => setRadar(!radar)} aria-label="Ligar ou desligar chuva no mapa" className={`grid h-14 w-14 place-items-center rounded-full border shadow-xl ${radar ? "bg-primary text-primary-foreground" : "bg-card"}`}><span className="text-center text-[10px] font-bold leading-tight">🌧<br/>Radar</span></button>
