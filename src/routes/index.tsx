@@ -222,4 +222,21 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 .ajf .quem-faz{margin-top:22px;padding:18px 22px}.ajf .quem-faz p{margin:6px 0 0}
 @media(min-width:801px){.ajf .install-banner{display:none}}
 
+@media(max-width:700px){
+.ajf .environment-cards{grid-template-columns:1fr 1fr;grid-auto-flow:dense;gap:8px}
+.ajf .env-card{position:relative;display:flex;flex-direction:column;gap:2px;padding:10px 12px;min-width:0}
+.ajf .env-card>*{margin:0}
+.ajf .env-card>.eyebrow{font-size:9px;letter-spacing:1.2px;line-height:1.3;padding-right:26px}
+.ajf .env-card>h3,.ajf .env-card>p{display:none}
+.ajf .env-card>.big-number{font-size:18px;line-height:1.25;letter-spacing:-.4px;margin-top:2px}
+.ajf .env-card>small{font-size:10px;line-height:1.35}
+.ajf .env-card>details{margin-top:4px;padding:4px 0 0;border-top:0;font-size:10px}
+.ajf .env-card:has(details[open]),.ajf .env-card:has(div[aria-label^="Rajadas"]){grid-column:1/-1}
+.ajf .env-card:has(details[open])>h3{display:block;font-size:12px;margin-top:2px}
+.ajf .env-card:has(details[open])>p,.ajf .env-card:has(div[aria-label^="Rajadas"])>p{display:block;font-size:11px;line-height:1.45}
+.ajf .env-card>div[aria-label^="Rajadas"]{height:24px!important;margin:3px 0 2px!important}
+.ajf .env-card a.wa-share{position:absolute;top:8px;right:10px;margin:0;padding:6px;font-size:0;gap:0;border-radius:8px}
+.ajf .environment-cards>.env-card:nth-child(5){order:1}.ajf .environment-cards>.env-card:nth-child(3){order:2}.ajf .environment-cards>.env-card:nth-child(4){order:3}.ajf .environment-cards>.env-card:nth-child(1){order:4}.ajf .environment-cards>.env-card:nth-child(2){order:5}
+}
+
 `;
