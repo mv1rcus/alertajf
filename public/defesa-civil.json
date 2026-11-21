@@ -1,0 +1,14 @@
+{
+  "fonte": "Defesa Civil Alerta (IDAP/MIDR)",
+  "alertas": [
+    {
+      "id": "199704/2026",
+      "evento": "CHUVAS INTENSAS",
+      "texto": "Alerta de tempestade com rajadas de vento e chuva moderada a forte com duração de 02:00h. Proteja-se!",
+      "emitido": "2026-11-21T19:49:20-03:00",
+      "expira": "2026-11-21T21:47:00-03:00",
+      "severidade": "Severe",
+      "origem": "Defesa Civil Estadual de Minas Gerais"
+    }
+  ]
+}
