@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import type { Ponto } from "@/lib/pontos";
@@ -30,7 +30,6 @@ export default function RainMap({ pontos, showRadar, foco }: { pontos: Ponto[]; 
   useEffect(() => {
     if (!el.current || map.current) return;
     let m: L.Map | null = L.map(el.current, { zoomControl: false }).setView([-21.7642, -43.3503], 13);
-    L.control.zoom({ position: "topright" }).addTo(m);
     import("@maplibre/maplibre-gl-leaflet").then(() => {
       if (!m) return;
       (L as unknown as { maplibreGL: (o: object) => L.Layer }).maplibreGL({ style: "https://tiles.openfreemap.org/styles/dark" }).addTo(m);
@@ -73,7 +72,7 @@ export default function RainMap({ pontos, showRadar, foco }: { pontos: Ponto[]; 
     if (!f || !frames) { radar.current?.remove(); radar.current = null; return; }
     const url = `${frames.host}${f.path}/256/{z}/{x}/{y}/4/1_1.png`;
     if (radar.current) radar.current.setUrl(url);
-    else radar.current = L.tileLayer(url, { opacity: 0.65, attribution: "Radar: RainViewer", zIndex: 400 }).addTo(m);
+    else radar.current = L.tileLayer(url, { opacity: 0.65, attribution: "Radar: RainViewer", zIndex: 400, maxNativeZoom: 7 }).addTo(m);
   }, [frames, idx]);
 
   useEffect(() => { if (foco && map.current) map.current.flyTo([foco.lat, foco.lng], 15); }, [foco]);

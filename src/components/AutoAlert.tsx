@@ -40,8 +40,8 @@ export default function AutoAlert() {
 
   return (
     <>
-      <div className={`px-4 py-1.5 text-center text-xs font-semibold ${cor}`}>
-        {texto}{motivos.length > 0 && ` — ${motivos.join(" · ")}`}{hora && ` · verificado às ${hora}`}
+      <div className={`pointer-events-auto inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-semibold shadow-lg ${cor}`}>
+        <span className="truncate">{texto}{motivos.length > 0 && ` — ${motivos.join(" · ")}`}{hora && ` · ${hora}`}</span>
       </div>
       {aberto && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/60 p-4" role="alertdialog">
