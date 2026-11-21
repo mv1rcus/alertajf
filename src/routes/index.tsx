@@ -13,7 +13,7 @@ export const Route = createFileRoute("/")({ head: () => ({ meta: [
 type Hour = { time: string; mm: number; probability: number };
 type Forecast = { hours: Hour[]; fetchedAt: number };
 type Report = { id: string; street: string; neighborhood: string; kind: "alagamento" | "interdicao" | "deslizamento"; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: "approved"; source: "citizen" | "official" };
-const API = (import.meta.env.VITE_REPORTS_API_URL || "").replace(/\/$/, "");
+const API = (import.meta.env["VITE_REPORTS_API_URL"] || "").replace(/\/$/, "");
 const labels = { alagamento: "Alagamento", interdicao: "Interdição", deslizamento: "Deslizamento" };
 const clock = (date: string | number) => new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const dateTime = (date: string) => new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
