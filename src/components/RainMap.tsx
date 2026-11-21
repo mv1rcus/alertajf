@@ -72,7 +72,7 @@ export default function RainMap({ pontos, showRadar, foco }: { pontos: Ponto[]; 
     if (!f || !frames) { radar.current?.remove(); radar.current = null; return; }
     const url = `${frames.host}${f.path}/256/{z}/{x}/{y}/4/1_1.png`;
     if (radar.current) radar.current.setUrl(url);
-    else radar.current = L.tileLayer(url, { opacity: 0.65, attribution: "Radar: RainViewer", zIndex: 400, maxNativeZoom: 7 }).addTo(m);
+    else radar.current = L.tileLayer(url, { opacity: 0.4, attribution: "Radar: RainViewer", zIndex: 400, maxNativeZoom: 7 }).addTo(m);
   }, [frames, idx]);
 
   useEffect(() => { if (foco && map.current) map.current.flyTo([foco.lat, foco.lng], 15); }, [foco]);
