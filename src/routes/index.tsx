@@ -236,6 +236,7 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 .ajf .env-card:has(details[open])>p,.ajf .env-card:has(div[aria-label^="Rajadas"])>p{display:block;font-size:11px;line-height:1.45}
 .ajf .env-card>div[aria-label^="Rajadas"]{height:24px!important;margin:3px 0 2px!important}
 .ajf .env-card a.wa-share{position:absolute;top:8px;right:10px;margin:0;padding:6px;font-size:0;gap:0;border-radius:8px}
+.ajf .environment-cards>.env-card:nth-child(5){order:1}.ajf .environment-cards>.env-card:nth-child(3){order:2}.ajf .environment-cards>.env-card:nth-child(4){order:3}.ajf .environment-cards>.env-card:nth-child(1){order:4}.ajf .environment-cards>.env-card:nth-child(2){order:5}
 }
 
 `;
