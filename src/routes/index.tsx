@@ -226,14 +226,14 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 .ajf .environment-cards{gap:8px}
 .ajf .env-card{position:relative;display:grid;grid-template-columns:1fr auto;column-gap:10px;align-items:center;padding:11px 14px}
 .ajf .env-card>*{grid-column:1/-1;min-width:0}
-.ajf .env-card>.eyebrow{padding-right:34px;font-size:9px;letter-spacing:1.4px}
+.ajf .env-card>.eyebrow{font-size:9px;letter-spacing:1.4px}
 .ajf .env-card>h3{grid-column:1;grid-row:2;margin:3px 0;font-size:12px;line-height:1.3}
 .ajf .env-card>.big-number{grid-column:2;grid-row:2;font-size:19px;line-height:1.2;letter-spacing:-.5px;margin:0;text-align:right;white-space:nowrap}
 .ajf .env-card>p{margin:3px 0;font-size:11px;line-height:1.45}
 .ajf .env-card>small{margin:0;font-size:10px;line-height:1.4}
-.ajf .env-card>details{margin-top:6px;padding-top:7px}
+.ajf .env-card>details{margin-top:4px;padding:4px 40px 0 0;border-top:0;min-height:26px}
 .ajf .env-card>div[aria-label^="Rajadas"]{height:26px!important;margin:4px 0 2px!important}
-.ajf .env-card a.wa-share{position:absolute;top:8px;right:10px;margin:0;padding:6px;font-size:0;gap:0;border-radius:8px}
+.ajf .env-card a.wa-share{position:absolute;bottom:8px;right:10px;margin:0;padding:6px;font-size:0;gap:0;border-radius:8px}
 }
 
 `;
