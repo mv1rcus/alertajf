@@ -1,24 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { pontosCriticos, alertas, type Ponto } from "@/lib/pontos";
-
-import AutoAlert from "@/components/AutoAlert";
-import RiverLevel from "@/components/RiverLevel";
-
-const RainMap = lazy(() => import("@/components/RainMap"));
-
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
-      { name: "description", content: "Mapa em tempo real de alagamentos, vias interditadas e áreas de risco em Juiz de Fora (MG), com alertas da Defesa Civil." },
-      { property: "og:title", content: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
-      { property: "og:description", content: "Mapa de chuvas, alagamentos e alertas da Defesa Civil em Juiz de Fora." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-import { lazy, Suspense, useEffect, useState } from "react";
 import { pontosCriticos, type Ponto } from "@/lib/pontos";
 import { useAvisos } from "@/lib/inmet";
 
