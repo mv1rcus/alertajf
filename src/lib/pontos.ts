@@ -1,4 +1,4 @@
-export type Ponto = { id: string; nome: string; tipo: "alagamento" | "interdicao" | "deslizamento" | "relato"; descricao: string; lat: number; lng: number };
+export type Ponto = { id: string; nome: string; tipo: "alagamento" | "interdicao" | "deslizamento" | "sem_luz" | "relato"; descricao: string; lat: number; lng: number };
 export const pontosCriticos: Ponto[] = [
   { id: "1", nome: "Rio Paraibuna", tipo: "alagamento", descricao: "Nível do rio em observação – risco de transbordamento", lat: -21.7600, lng: -43.3440 },
   { id: "2", nome: "Av. Brasil", tipo: "alagamento", descricao: "Pontos de alagamento ao longo da avenida", lat: -21.7560, lng: -43.3470 },
