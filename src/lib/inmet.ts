@@ -41,21 +41,21 @@ export async function buscarAvisos(): Promise<Aviso[]> {
   const vistos = new Set<string>();
   const lista: Aviso[] = [];
   for (const a of [...(d.hoje ?? []), ...(d.futuro ?? [])]) {
-    const geocodes = String(a.geocodes ?? "").split(",").map((x) => x.trim());
+    const geocodes = String(a["geocodes"] ?? "").split(",").map((x) => x.trim());
     if (!geocodes.includes(GEOCODE_JF)) continue;
-    if (String(a.encerrado).toLowerCase() === "true") continue;
-    const id = String(a.id_aviso ?? a.id);
+    if (String(a["encerrado"]).toLowerCase() === "true") continue;
+    const id = String(a["id_aviso"] ?? a["id"]);
     if (vistos.has(id)) continue;
     vistos.add(id);
     lista.push({
       id,
-      descricao: String(a.descricao ?? "Aviso"),
-      severidade: String(a.severidade ?? ""),
-      cor: String(a.aviso_cor ?? "#FFFE00"),
-      inicio: dataBr(a.inicio),
-      fim: dataBr(a.fim),
-      riscos: itens(a.riscos).join(" "),
-      instrucoes: itens(a.instrucoes),
+      descricao: String(a["descricao"] ?? "Aviso"),
+      severidade: String(a["severidade"] ?? ""),
+      cor: String(a["aviso_cor"] ?? "#FFFE00"),
+      inicio: dataBr(a["inicio"]),
+      fim: dataBr(a["fim"]),
+      riscos: itens(a["riscos"]).join(" "),
+      instrucoes: itens(a["instrucoes"]),
     });
   }
   return lista;
