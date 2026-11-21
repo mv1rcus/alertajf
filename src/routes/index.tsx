@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Zap, CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw, Share2, Smartphone } from "lucide-react";
 import { useAvisos } from "@/lib/inmet";
 import { useAlertaDC, horaAlertaDC } from "@/lib/defesacivil";
+import { VentoCard } from "@/components/VentoCard";
 import { buscarRaios, type Raios } from "@/lib/raios";
 import { getEnvironment, type EnvironmentData } from "@/lib/environment";
 import { getRainViewer, type RainViewerData } from "@/lib/rainviewer";
@@ -192,6 +193,7 @@ function Index() {
         <article className="card env-card"><div className="eyebrow">RIO PARAIBUNA · ANA</div><h3>Nível na estação Marmelos</h3><strong className="big-number">{river && !environmentStale ? `${(river.cm / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m` : "Sem leitura"}</strong><p>{river && !environmentStale ? `Cota da régua · ${previousRiver ? river.cm > previousRiver.cm ? "subiu" : river.cm < previousRiver.cm ? "desceu" : "sem variação" : "sem comparação"} desde a leitura anterior` : "Não há medição recente validada nesta consulta."}</p><small>{river ? `${dateTime(river.time)} · há ${riverAge} min${riverAge !== null && riverAge > 120 ? " · leitura atrasada" : ""}` : "Aguardando ANA"}</small><details><summary>Sobre esta medição</summary><p>Estação 58480501, PCH Marmelos Montante 1. É cota em uma régua, não a profundidade do rio nem nível de toda a cidade. Sem limite local de transbordamento validado. Dados telemétricos podem atrasar ou conter erros.</p><a href={environment?.river.source || "https://telemetriaws1.ana.gov.br/ServiceANA.asmx"} target="_blank" rel="noreferrer">Ver fonte ANA ↗</a></details><a className="wa-share" href={waShare(riverShare)} onClick={shareTap(riverShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></article>
         <article className="card env-card"><div className="eyebrow">DESLIZAMENTOS · CEMADEN</div><h3>Alertas de movimentos de massa em JF</h3><strong className="big-number alert-text">{environmentStale || environment?.alerts.status !== "ok" ? "Sem consulta" : movementAlerts.length ? movementAlerts.map(a => a.level).join(" / ") : "Sem aviso listado"}</strong><p>{environmentStale || environment?.alerts.status !== "ok" ? "Fonte oficial indisponível ou desatualizada no momento. Isso não significa ausência de risco." : movementAlerts.length ? movementAlerts.map(a => a.event).join(" · ") : "Nenhum alerta de movimentos de massa emitido para o município de Juiz de Fora nesta consulta. Alertas de cidades vizinhas não entram aqui."}</p><small>{environment ? `Consulta às ${clock(environment.checkedAt)}` : "Consultando fonte oficial…"}</small><details><summary>Entenda o aviso</summary><p>Só entram avisos emitidos para o município de Juiz de Fora (código IBGE 3136702); alertas de cidades vizinhas não aparecem. Alerta municipal, não diagnóstico de uma encosta. Sem aviso não significa ausência de risco. Trincas, movimentação de terra ou água barrenta exigem atenção e contato com a Defesa Civil.</p>{movementAlerts.map(a => <p key={a.id}>Fonte: CEMADEN · atualização: {a.time}</p>)}<a href="https://painelalertas.cemaden.gov.br/" target="_blank" rel="noreferrer">Abrir painel oficial ↗</a></details></article>
         <article className="card env-card"><div className="eyebrow">RAIOS · INPE</div><h3>Descargas elétricas em JF</h3><strong className="big-number alert-text">{raiosError || !raios ? "Sem consulta" : raios.descargas > 0 ? `${raios.descargas} descargas` : "Nenhuma descarga"}</strong><p>{raiosError || !raios ? "Consulta indisponível ou desatualizada. Isso não significa ausência de raios na cidade." : raios.descargas > 0 ? `Células de tempestade com descargas sobre o município na última leitura. A contagem é da célula inteira, que pode passar dos limites da cidade.` : "Nenhuma descarga detectada em Juiz de Fora na leitura mais recente. Isso não significa ausência de risco: tempestades podem se formar rápido e o dado atrasa alguns minutos."}</p><small>{raios && !raiosError ? `Atualizado às ${clock(raios.atualizado.includes("T") ? raios.atualizado : raios.atualizado.replace(" ", "T") + "Z")} · janela de ~5 min` : "Consultando a rede de detecção do INPE…"}</small><details><summary>Sobre esta medição</summary><p>Rede de detecção de descargas atmosféricas do INPE/CPTEC, nas células de tempestade que tocam o município de Juiz de Fora. Não mostra cada raio nem o ponto exato da queda. Sem registro não significa céu seguro.</p><a href="https://www.gov.br/inpe/pt-br/acesso-a-informacao/perguntas-frequentes/principais-produtos-e-servicos-do-inpe/monitoramento-do-territorio-raios/monitoramento-do-territorio-raios" target="_blank" rel="noreferrer">Fonte: INPE ↗</a></details><a className="wa-share" href={waShare(raiosShare)} onClick={shareTap(raiosShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></article>
+        <VentoCard />
         <article className="card env-card"><div className="eyebrow">CHUVA OBSERVADA · RADAR</div><h3>Radar de chuva em movimento</h3><strong className="big-number alert-text">{rvFresh ? "Radar atualizado" : environmentStale || environment?.radar.status !== "ok" ? "Sem imagem recente" : "Radar disponível"}</strong><p>Veja o deslocamento da chuva na animação do mapa, com quadros de radar a cada ~10 min. Não prevê o minuto em que a chuva chegará à sua rua.</p><small>{rvFresh && rvLast ? `Último quadro: ${clock(rvLast.time * 1000)} · atualiza a cada ~10 min` : environment?.radar.frames.at(-1) ? `Última imagem INPE: ${dateTime(environment.radar.frames.at(-1)!.time)}` : "Aguardando fontes de radar…"}</small><details><summary>Cobertura e limites</summary><p>Ecos de chuva medidos por radares meteorológicos, com atraso de minutos entre a medição e a exibição. A animação do mapa usa o mosaico mundial do RainViewer, atualizado a cada ~10 minutos; o detalhe regional do radar INPE/DECEA de Pico do Couto entra quando está recente. É chuva observada, sujeita a falhas de cobertura. Sem eco não garante que não chove no solo.</p><a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">Dados de radar: RainViewer ↗</a><a href="https://data.inpe.br/dados/radares-meteorologicos/" target="_blank" rel="noreferrer">Dados e metodologia INPE ↗</a></details></article>
       </section>
       <section id="ocorrencias" className="streets"><div className="section-heading"><div><div className="eyebrow">RADAR REGIONAL E OCORRÊNCIAS</div><h2>A cidade no mapa</h2><p>Chuva observada por radar e relatos de alagamentos, interdições, deslizamentos e falta de luz.</p><span className="community-pill"><ShieldCheck size={14}/>{reportsStatus === "ready" ? `${liveReports.length} ${liveReports.length === 1 ? "relato ativo" : "relatos ativos"} · da comunidade, não verificados` : "Relatos da comunidade · não verificados"}</span></div><div className="head-actions"><a className="primary" href="https://www.cemig.com.br/mapa-de-fornecimento-de-energia/" target="_blank" rel="noopener noreferrer"><Zap size={18}/>Mapa oficial da Cemig</a><button className="primary" onClick={() => { setShowForm(!showForm); setSubmission(""); }}><Plus size={18}/>Relatar ocorrência</button></div></div>
@@ -252,3 +254,92 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 `;
 
 
+
+import { createFileRoute } from "@tanstack/react-router";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Zap, CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw, Share2, Smartphone } from "lucide-react";
+import { useAvisos } from "@/lib/inmet";
+import { useAlertaDC, horaAlertaDC } from "@/lib/defesacivil";
+import { buscarRaios, type Raios } from "@/lib/raios";
+import { getEnvironment, type EnvironmentData } from "@/lib/environment";
+import { getRainViewer, type RainViewerData } from "@/lib/rainviewer";
+import { loadCommunityReports, submitCommunityReport, reactToCommunityReport, withdrawCommunityReport, type CommunityReport } from "@/lib/reports";
+import type { Ponto } from "@/lib/pontos";
+
+const RainMap = lazy(() => import("@/components/RainMap"));
+export const Route = createFileRoute("/")({ head: () => ({ meta: [
+  { title: "Alerta JF | Chuva e relatos da cidade" },
+  { name: "description", content: "Previsão de chuva para Juiz de Fora, avisos do INMET e relatos de ocorrências. Projeto independente, não substitui a Defesa Civil." },
+  { property: "og:title", content: "Alerta JF | Chuva e relatos da cidade" },
+  { property: "og:description", content: "Previsão de chuva para Juiz de Fora, avisos do INMET e relatos de ocorrências. Projeto independente, não substitui a Defesa Civil." },
+  { property: "og:type", content: "website" },
+  { property: "og:url", content: "https://alertajf.vercel.app/" },
+  { property: "og:image", content: "https://alertajf.vercel.app/og-image.png" },
+  { property: "og:image:width", content: "1200" },
+  { property: "og:image:height", content: "630" },
+  { property: "og:locale", content: "pt_BR" },
+  { name: "twitter:card", content: "summary_large_image" },
+  { name: "twitter:title", content: "Alerta JF | Chuva e relatos da cidade" },
+  { name: "twitter:description", content: "Previsão de chuva para Juiz de Fora, avisos do INMET e relatos de ocorrências. Projeto independente, não substitui a Defesa Civil." },
+  { name: "twitter:image", content: "https://alertajf.vercel.app/og-image.png" },
+] }), component: Index });
+
+type Hour = { time: string; mm: number; probability: number };
+type Forecast = { hours: Hour[]; fetchedAt: number };
+type Report = CommunityReport;
+const API = true;
+const labels = { alagamento: "Alagamento", interdicao: "Interdição", deslizamento: "Deslizamento", sem_luz: "Sem luz" };
+const clock = (date: string | number) => new Date(date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+const dateTime = (date: string) => new Date(date).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+function validLocation(lat: number, lng: number) { return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -22.1 && lat <= -21.3 && lng >= -43.9 && lng <= -42.9; }
+function validReport(x: Report) { return x && typeof x.id === "string" && typeof x.street === "string" && typeof x.neighborhood === "string" && typeof x.description === "string" && x.kind in labels && x.status === "community" && x.source === "citizen" && Number.isSafeInteger(x.seen_count) && x.seen_count >= 0 && validLocation(x.lat, x.lng) && Number.isFinite(Date.parse(x.observed_at)) && Date.parse(x.observed_at) <= Date.now() + 60000 && Date.parse(x.expires_at) > Date.now(); }
+
+function Index() {
+  const { avisos, status: officialStatus, atualizado } = useAvisos();
+  const { alerta: alertaDC, status: statusDC } = useAlertaDC();
+  const [mounted, setMounted] = useState(false);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [weatherError, setWeatherError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reportsStatus, setReportsStatus] = useState("loading");
+  const [reportsAt, setReportsAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [radar, setRadar] = useState(true);
+  const [environment, setEnvironment] = useState<EnvironmentData | null>(null);
+  const [environmentError, setEnvironmentError] = useState(false);
+  const [focus, setFocus] = useState<Ponto | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationNote, setLocationNote] = useState("");
+  const [submission, setSubmission] = useState("");
+  const [sending, setSending] = useState(false);
+  const [actionNote, setActionNote] = useState("");
+  const [acting, setActing] = useState(false);
+  const [requestId, setRequestId] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const [raios, setRaios] = useState<Raios | null>(null);
+  const [raiosError, setRaiosError] = useState(false);
+  const [rv, setRv] = useState<RainViewerData | null>(null);
+  const [rvError, setRvError] = useState(false);
+  const [installEvent, setInstallEvent] = useState<{ prompt: () => Promise<void> } | null>(null);
+  const [installDismissed, setInstallDismissed] = useState(true);
+  useEffect(() => { setMounted(true); const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    setInstallDismissed(window.localStorage.getItem("ajf-install-off") === "1");
+    const onBeforeInstall = (e: Event) => { e.preventDefault(); setInstallEvent(e as unknown as { prompt: () => Promise<void> }); };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+  }, []);
+  useEffect(() => { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); }, []);
+  useEffect(() => {
+    let alive = true;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503&hourly=precipitation,precipitation_probability&forecast_days=2&timezone=America%2FSao_Paulo", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
+        if (!response.ok) throw Error("forecast");
+        const data = await response.json();
+        if (!Array.isArray(data.hourly?.time)) throw Error("forecast");
