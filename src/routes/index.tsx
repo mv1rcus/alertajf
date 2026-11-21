@@ -54,7 +54,7 @@ function Index() {
 
       {/* Topo flutuante */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-[1000] space-y-2 p-3">
-        <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border bg-card px-3 py-2 shadow-xl backdrop-blur md:max-w-xl">
+        <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border bg-card px-3 py-2 shadow-xl md:max-w-xl">
           <div className="font-display text-lg leading-none">Alerta<span className="text-primary">JF</span></div>
           <div className="h-6 w-px bg-border" />
           <p className="min-w-0 flex-1 truncate text-xs"><span className="mr-1 rounded bg-alert px-1.5 py-0.5 font-bold text-alert-foreground">40199</span>{alertas[i]?.texto}</p>
@@ -71,7 +71,7 @@ function Index() {
       </div>
 
       {/* Painel deslizante */}
-      <section className={`absolute inset-x-0 bottom-0 z-[1001] flex max-h-[75dvh] flex-col rounded-t-3xl border-t bg-card shadow-2xl backdrop-blur transition-transform duration-300 md:inset-x-auto md:bottom-3 md:left-3 md:w-96 md:rounded-3xl md:border ${painel ? "translate-y-0" : "translate-y-[calc(100%-9.5rem)] md:translate-y-[calc(100%-9.5rem)]"}`}>
+      <section className={`absolute inset-x-0 bottom-0 z-[1001] flex max-h-[75dvh] flex-col rounded-t-3xl border-t bg-card shadow-2xl transition-transform duration-300 md:inset-x-auto md:bottom-3 md:left-3 md:w-96 md:rounded-3xl md:border ${painel ? "translate-y-0" : "translate-y-[calc(100%-9.5rem)] md:translate-y-[calc(100%-9.5rem)]"}`}>
         <button onClick={() => setPainel(!painel)} className="flex flex-col items-center pt-2" aria-label="Abrir ou fechar painel">
           <span className="h-1.5 w-12 rounded-full bg-muted-foreground/40" />
         </button>

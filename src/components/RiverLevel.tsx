@@ -20,7 +20,7 @@ export default function RiverLevel() {
         🌊 Rio Paraibuna: {nome} · {pct}% {aberto ? "▴" : "▾"}
       </button>
       {aberto && (
-        <div className="mt-2 w-72 rounded-2xl border bg-card p-3 text-xs shadow-xl backdrop-blur">
+        <div className="mt-2 w-72 rounded-2xl border bg-card p-3 text-xs shadow-xl">
           <div className="mb-1 flex justify-between"><span>Água passando hoje</span><b>{Math.round(rio.hoje)} m³/s</b></div>
           <div className="mb-3 flex justify-between text-muted-foreground"><span>Normal da época</span><span>{Math.round(rio.normal)} m³/s</span></div>
           <div className="relative flex h-24 items-end gap-1">
