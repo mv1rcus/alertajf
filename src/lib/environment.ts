@@ -47,7 +47,9 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       const stamp = data.alerts.updated.match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}:\d{2}:\d{2}) UTC$/);
       const sourceAt = stamp ? Date.parse(`${stamp[3]}-${stamp[2]}-${stamp[1]}T${stamp[4]}Z`) : NaN;
       if (!Number.isFinite(sourceAt) || Date.now() - sourceAt > 60 * 60000 || sourceAt > Date.now() + 60000) throw Error("Painel desatualizado");
-      data.alerts.items = json.alertas.filter((x: Record<string, unknown>) => String(x['codibge']) === "3136702" && x['uf'] === "MG" && x['status'] === 1).map((x: Record<string, unknown>) => ({ id: String(x['cod_alerta']), event: String(x['evento']), level: String(x['nivel']), time: String(x['ult_atualizacao']) }));
+      const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const soJF = (x: Record<string, unknown>) => (String(x["codibge"] ?? "").trim() === "3136702" || semAcento(String(x["municipio"] ?? "")) === "juiz de fora") && String(x["uf"]) === "MG" && x["status"] === 1;
+      data.alerts.items = json.alertas.filter(soJF).map((x: Record<string, unknown>) => ({ id: String(x['cod_alerta']), event: String(x['evento']), level: String(x['nivel']), time: String(x['ult_atualizacao']) }));
       data.alerts.status = "ok";
     })(),
     (async () => {
