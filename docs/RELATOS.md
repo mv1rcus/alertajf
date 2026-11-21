@@ -1,62 +1,47 @@
-# Relatos da comunidade: ativação pendente
+# Relatos da comunidade
 
-O redesenho não cria conta, não conecta banco e não publica relatos falsos. Sem `VITE_REPORTS_API_URL`, o envio fica indisponível com explicação visível. Nenhuma chave secreta pode entrar em variável `VITE_`.
+Implementado no PR #4, aguardando revisão e aprovação antes de entrar em produção.
 
-## Contrato da API
+## O que aparece
 
-O frontend já lê `GET /reports` e envia `POST /reports` sob a URL HTTPS da variável `VITE_REPORTS_API_URL`. Esse servidor ainda precisa ser implementado e configurado antes de habilitar a variável. Uma URL configurada, sozinha, não ativa persistência.
+Relatos são publicados imediatamente como **relato da comunidade, não verificado**. Não há aprovação oficial nem classificação de segurança. “Também vi” mostra um número de apoios de sessões diferentes. O próprio autor não pode apoiar, e cada sessão só pode apoiar uma vez. Apoios não transformam o relato em confirmado.
 
-GET retorna `{ "reports": [...] }`, somente aprovados e não vencidos. Campos: `id`, `street`, `neighborhood`, `kind` (`alagamento`, `interdicao`, `deslizamento`), `description`, `lat`, `lng`, `observed_at`, `expires_at`, `status` (`approved`), `source` (`citizen` ou `official`). Datas ISO com fuso. Resposta não inclui IP, identificador privado, contato ou dados de moderação.
+Os relatos somem da consulta e do mapa 2 horas após a observação. Isso não significa que a rua ficou segura. O autor pode retirar seu relato no mesmo navegador. Três denúncias de sessões diferentes ocultam um relato. Essas regras são simples e podem sofrer abuso; não há atendimento ou revisão humana garantidos.
 
-POST aceita apenas `street`, `neighborhood`, `kind`, `description`, `lat`, `lng`, `observed_at` e o campo antispam `website` (que deve estar vazio). O servidor atribui `id`, data de recebimento, origem `citizen`, status `pending` e vencimento. Nunca aceitar `status`, `source`, `expires_at` ou poder de moderador do navegador. Retornar HTTP 202 e identificador apenas depois de gravação durável. POST não publica automaticamente.
+## Implementação e acesso
 
-## Banco de referência (não executado)
+- Projeto dedicado: https://supabase.com/dashboard/project/fnpssjnsljhwdoikfwcu
+- Supabase Free, região São Paulo. Nenhum cartão ou plano pago.
+- `src/lib/reports-config.ts` contém somente URL do projeto e chave **publishable**, feitas para o navegador. Não colocar senha, `service_role`, chave secreta ou token administrativo em `VITE_*` ou no repositório.
+- Não precisa de variável de ambiente secreta na Vercel. A publicação desse PR habilita o cliente para o projeto dedicado.
+- Tabelas em `ajf_private`, fora do schema público e sem grants para `anon`/`authenticated`, com RLS habilitada e sem políticas diretas. As únicas operações expostas são as funções abaixo, com `search_path` fixo e grants mínimos.
+- `ajf_reports`: leitura pública apenas de campos necessários, últimos 100 ativos, não retirados e não ocultados. Nunca retorna autor, IP, contato ou tokens.
+- `ajf_submit`: sessão anônima autenticada, validação de texto, campos extras recusados, tipos, coordenadas regionais, observação das últimas 2h sem futuro, honeypot, expiração calculada no banco, origem fixa da comunidade e ID de tentativa para reenvio idempotente.
+- `ajf_react`: sem autoapoio/autodenúncia, sem repetição, apenas ativo, limite por sessão e global.
+- `ajf_withdraw`: autor da mesma sessão pode retirar, ninguém pode alterar relatos alheios.
+- SQL de instalação revisado e aplicado no banco dedicado, disponível em `docs/COMMUNITY.sql`. Não executar novamente sem migração: o script inicial cria objetos e não é idempotente.
 
-Esquema PostgreSQL sugerido, para ser revisado ao escolher/configurar o serviço. Não executar automaticamente em produção. Não há migração aplicada.
+## Limites e privacidade
 
-```sql
-create table public.community_reports (
-  id uuid primary key default gen_random_uuid(),
-  street text not null check (char_length(street) between 3 and 120),
-  neighborhood text not null check (char_length(neighborhood) between 2 and 80),
-  kind text not null check (kind in ('alagamento','interdicao','deslizamento')),
-  description text not null check (char_length(description) between 10 and 600),
-  lat double precision not null check (lat between -22.1 and -21.3),
-  lng double precision not null check (lng between -43.9 and -42.9),
-  observed_at timestamptz not null,
-  received_at timestamptz not null default now(),
-  expires_at timestamptz not null,
-  status text not null default 'pending' check (status in ('pending','approved','rejected','resolved')),
-  source text not null default 'citizen' check (source in ('citizen','official')),
-  reviewed_at timestamptz,
-  reviewer_id uuid,
-  check (expires_at > observed_at)
-);
-create index community_reports_active on public.community_reports(status, expires_at);
-alter table public.community_reports enable row level security;
--- Se usado com Supabase, executar apenas após revisão das funções e papéis:
-revoke all on public.community_reports from anon, authenticated;
--- Não há política de escrita pública. Todas as operações passam por API
--- com credencial de servidor, validação e autenticação de moderador.
--- Credencial service_role fica SOMENTE no servidor.
-```
+- 5 relatos/hora/sessão, intervalo mínimo de 1 minuto.
+- 100 relatos/hora para o projeto, com serialização no banco contra concorrência.
+- 30 ações/hora/sessão e 500 ações/hora/projeto.
+- Autenticação Supabase limita por padrão a criação de sessões anônimas a 30/hora por IP; não alterado.
+- Sessão não equivale a pessoa. Apagar armazenamento, trocar navegador ou IP pode contornar parte dos limites. Não anunciar identidade verificada nem proteção absoluta contra spam. CAPTCHA não está configurado; avaliar se houver abuso.
+- A caixa regional é ampla, não um teste de pertença ao município. O formulário diz JF e entorno. Não geocodificar para alegar localização exata de endereço.
+- Campos de localização e texto são públicos. GPS só é pedido pelo botão e o usuário confirma o ponto. O frontend renderiza texto sem HTML.
+- Registros vencidos ficam fora da consulta pública; registros com mais de 7 dias são apagados na próxima publicação. Sem publicação posterior, os registros antigos podem permanecer privados. Sessões anônimas e logs do serviço seguem a retenção do provedor e não são apagados pelo script de relatos.
+- A senha do banco fica no cofre e não é usada pelo frontend. Tokens de sessão ficam no armazenamento local do visitante. Não há e-mail, telefone ou cadastro obrigatório.
+- Falhas não são traduzidas em ausência de perigo. Um envio de resultado incerto pede atualizar a lista; o ID da tentativa impede duplicação no mesmo formulário.
 
-## O que falta antes de liberar
+## Verificação antes da entrega
 
-1. Confirmar responsável e substituto pela moderação. Não há promessa de atendimento 24 horas. Primeiro modo recomendado: todo relato aguarda revisão. Não oferecer chave de autoaprovação ao cliente. UI administrativa protegida e registro de quem aprovou, rejeitou, encerrou ou corrigiu cada item ainda precisam ser implementados.
-2. Implementar a API acima com validação no servidor. Validar CEP/localidade por limites municipais quando houver geometria oficial, tamanho dos textos, coordenadas finitas, horário observado nas últimas 2 horas e nunca no futuro. A caixa geográfica do frontend é apenas filtro amplo, não prova de pertencer a JF.
-3. Política inicial sugerida: expirar 2h após a observação, nunca 2h após uma aprovação tardia. Não aprovar um relato já vencido. Renovação requer nova observação e revisão. Expiração é decisão editorial, não limiar de segurança de órgão oficial. Aplicar filtro de vencimento no banco/API e no frontend. Relato encerrado não prova que uma rua ficou segura.
-4. Proteger POST com limite por origem/sessão, limite global, deduplicação, CAPTCHA validado no servidor quando aplicável e proteção contra abuso. Honeypot sozinho não basta. Rejeitar campos extras e HTML; renderizar sempre como texto. Não expor contatos/IP nem localização do aparelho quando diferente do local que o usuário confirmou.
-5. Autenticação forte para moderadores, autorização de servidor e trilha privada de auditoria. Fonte oficial somente por ingestão verificada ou curadoria com URL de origem. Aprovação humana não equivale a confirmação oficial. Definir canal de correção/denúncia e política de retenção. Até existir canal, não ativar envio público.
-6. Configurar CORS para a origem do site, HTTPS, timeouts, monitoramento de indisponibilidade, retenção e backups exportáveis. Testar consultas de dois dispositivos e atualização da página, envio negado, falha de rede, aprovação, expiração e tentativas de alterar terceiros antes de liberar.
-7. Supabase Free pode hospedar o banco no início, dentro de cotas. Pausa por inatividade e ausência de garantias impedem tratá-lo como sistema de emergência. Não ativar plano pago nem criar contas sem aprovação.
+- Build completo, TypeScript e 9 testes existentes passaram.
+- Consulta HTTP real retornou lista vazia e autenticação anônima respondeu corretamente.
+- Teste SQL em uma transação com rollback passou: permissões, inserção, idempotência, limite, autoapoio, apoio duplicado, falsificação de origem oficial, contagem de apoio, ocultação com 3 denúncias e expiração. Banco ficou vazio após rollback. Nenhum relato fictício foi mantido.
+- Verificar retirada, rede indisponível, UI desktop/celular e carregamento do deploy de prévia antes de pedir aprovação.
+- Não publicar teste fictício no feed. Testes de escrita devem usar transação e rollback ou ambiente isolado não público.
 
-## Decisões do redesenho
+## Limitações operacionais
 
-- Sem pontos demonstrativos na camada de ocorrências reais.
-- Indicador automático de risco/sirene e classificação experimental de transbordamento não aparecem na página. Os arquivos antigos continuam no repositório, mas não são montados.
-- Previsão Open-Meteo é horária para a cidade, com data de consulta e estado indisponível. Não fornece previsão precisa por rua nem minuto.
-- Radar exibe apenas passado recente, não previsão. Falhas e atraso são visíveis; cobertura local pode ser incompleta. A lista é alternativa ao mapa.
-- Previsão gratuita requer uso não comercial e atribuição. Propaganda, assinatura ou finalidade promocional mudam o enquadramento. Não é garantia de disponibilidade.
-
-Fontes de referência: https://open-meteo.com/en/terms , https://open-meteo.com/en/docs , https://www.rainviewer.com/api/transition-faq.html , https://supabase.com/pricing , https://supabase.com/docs/guides/database/postgres/row-level-security . Verificadas em 21/11/2026, revisar ao ativar.
+Supabase Free pode pausar por inatividade e tem cotas. Não há garantia de disponibilidade nem backup gerenciado nesta configuração. Não é um canal de emergência. Em perigo, buscar local seguro e ligar 199 ou 193.
