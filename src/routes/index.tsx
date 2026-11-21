@@ -18,6 +18,26 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+import { lazy, Suspense, useEffect, useState } from "react";
+import { pontosCriticos, type Ponto } from "@/lib/pontos";
+import { useAvisos } from "@/lib/inmet";
+
+import AutoAlert from "@/components/AutoAlert";
+import RiverLevel from "@/components/RiverLevel";
+
+const RainMap = lazy(() => import("@/components/RainMap"));
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
+      { name: "description", content: "Mapa em tempo real de alagamentos, vias interditadas e áreas de risco em Juiz de Fora (MG), com avisos oficiais do INMET." },
+      { property: "og:title", content: "Alerta JF – Chuvas e emergências em Juiz de Fora" },
+      { property: "og:description", content: "Mapa de chuvas, alagamentos e avisos oficiais do INMET em Juiz de Fora." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
@@ -30,7 +50,10 @@ function Index() {
   const [foco, setFoco] = useState<Ponto | null>(null);
   const [form, setForm] = useState(false);
   const [i, setI] = useState(0);
-  useEffect(() => { setMounted(true); const t = setInterval(() => setI((x) => (x + 1) % alertas.length), 6000); return () => clearInterval(t); }, []);
+  const { avisos, status, atualizado } = useAvisos();
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => { if (avisos.length < 2) return; const t = setInterval(() => setI((x) => (x + 1) % avisos.length), 6000); return () => clearInterval(t); }, [avisos.length]);
+  const aviso = avisos[i % Math.max(avisos.length, 1)];
 
   function reportar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,7 +80,7 @@ function Index() {
         <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border bg-card px-3 py-2 shadow-xl md:max-w-xl">
           <div className="font-display text-lg leading-none">Alerta<span className="text-primary">JF</span></div>
           <div className="h-6 w-px bg-border" />
-          <p className="min-w-0 flex-1 truncate text-xs"><span className="mr-1 rounded bg-alert px-1.5 py-0.5 font-bold text-alert-foreground">40199</span>{alertas[i]?.texto}</p>
+          <p className="min-w-0 flex-1 truncate text-xs"><span className="mr-1 rounded bg-alert px-1.5 py-0.5 font-bold text-alert-foreground">INMET</span>{aviso ? `${aviso.descricao} (${aviso.severidade}) até ${aviso.fim}` : status === "carregando" ? "Buscando avisos oficiais…" : status === "erro" ? "Não foi possível consultar o INMET agora" : "Nenhum aviso do INMET ativo para Juiz de Fora"}</p>
         </div>
         {mounted && <AutoAlert />}
         {mounted && <RiverLevel />}
@@ -108,9 +131,21 @@ function Index() {
             ))}
           </ul>
           <div>
-            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Avisos da Defesa Civil</h2>
-            {alertas.map((a) => <p key={a.quando} className="mb-2 rounded-xl border-l-4 border-alert bg-secondary p-3 text-xs"><b>{a.quando}</b> — {a.texto}</p>)}
+            <h2 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Avisos oficiais (INMET)</h2>
+            {avisos.length === 0 && <p className="mb-2 rounded-xl border-l-4 border-muted-foreground bg-secondary p-3 text-xs">{status === "carregando" ? "Buscando avisos oficiais…" : status === "erro" ? "Não foi possível consultar o INMET agora. Veja os avisos em portal.inmet.gov.br/avisos ou ligue 199." : "Nenhum aviso do INMET ativo para Juiz de Fora neste momento."}</p>}
+            {avisos.map((a) => (
+              <div key={a.id} className="mb-2 rounded-xl border-l-4 bg-secondary p-3 text-xs" style={{ borderLeftColor: a.cor }}>
+                <p><b>{a.descricao}</b> · {a.severidade}</p>
+                <p className="text-muted-foreground">De {a.inicio} até {a.fim}</p>
+                {a.riscos && <p className="mt-1">{a.riscos}</p>}
+                {a.instrucoes.length > 0 && <ul className="mt-1 list-disc pl-4 text-muted-foreground">{a.instrucoes.map((t) => <li key={t}>{t}</li>)}</ul>}
+              </div>
+            ))}
+            {atualizado && <p className="text-[10px] text-muted-foreground">Fonte: INMET (avisos meteorológicos). Atualizado às {atualizado}.</p>}
           </div>
+          <p className="rounded-xl border bg-secondary p-3 text-[11px] leading-snug text-muted-foreground">
+            Projeto independente, não oficial e sem ligação com a Prefeitura, a Defesa Civil ou o INMET. Os pontos críticos do mapa são exemplos. Em emergência, ligue 199 (Defesa Civil) ou 193 (Bombeiros).
+          </p>
         </div>
       </section>
     </div>
