@@ -1,6 +1,6 @@
 // Only the public project URL and publishable key belong here. No service_role key.
 import { projectUrl, publishableKey } from './reports-config';
-export type CommunityReport = { id: string; street: string; neighborhood: string; kind: 'alagamento'|'interdicao'|'deslizamento'; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: 'community'; source: 'citizen'; seen_count: number };
+export type CommunityReport = { id: string; street: string; neighborhood: string; kind: 'alagamento'|'interdicao'|'deslizamento'|'sem_luz'; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: 'community'; source: 'citizen'; seen_count: number };
 type Session = { access_token: string; refresh_token: string; expires_at: number };
 const storageKey = 'alertajf-community-session-v1';
 let pendingSession: Promise<string> | null = null;
