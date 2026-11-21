@@ -1,0 +1,28 @@
+name: Alertas da Defesa Civil (JF)
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: defesa-civil
+  cancel-in-progress: true
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: python3 scripts/defesa_civil.py
+      - name: Commit se mudou
+        run: |
+          if [ -n "$(git status --porcelain public/defesa-civil.json)" ]; then
+            git config user.name "alertajf-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add public/defesa-civil.json
+            git commit -m "dados: alerta Defesa Civil JF"
+            git push
+          fi
