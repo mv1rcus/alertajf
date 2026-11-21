@@ -3,8 +3,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Ponto } from "@/lib/pontos";
 
-const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", relato: "📍" };
-const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", relato: "#127e86" };
+const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", sem_luz: "💡", relato: "📍" };
+const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", sem_luz: "#6b5bb5", relato: "#127e86" };
 export default function RainMap({ pontos, showRadar, foco, onPick, selected, radarFrames, radarStatus }: {
   radarFrames?: { time: string; url: string; bbox: number[] }[] | undefined; radarStatus?: string | undefined;
   pontos: Ponto[]; showRadar: boolean; foco: Ponto | null;
