@@ -19,6 +19,6 @@ export async function buscarRio(): Promise<Rio> {
   const iHoje = Math.max(0, t.length - 6);
   const passado = [...v.slice(0, iHoje)].sort((a, b) => a - b);
   const normal = passado[Math.floor(passado.length / 2)] ?? v[iHoje] ?? 0;
-  const dias = t.slice(iHoje - 7, iHoje + 6).map((data, k) => ({ data, vazao: v[iHoje - 7 + k], previsao: iHoje - 7 + k > iHoje }));
+  const dias = t.slice(iHoje - 7, iHoje + 6).map((data, k) => ({ data, vazao: v[iHoje - 7 + k] ?? 0, previsao: iHoje - 7 + k > iHoje }));
   return { hoje: v[iHoje] ?? 0, normal, dias };
 }
