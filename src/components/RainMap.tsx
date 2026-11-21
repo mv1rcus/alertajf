@@ -9,7 +9,7 @@ const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", rel
 const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", relato: "#127e86" };
 export default function RainMap({ pontos, showRadar, foco, onPick, selected }: {
   pontos: Ponto[]; showRadar: boolean; foco: Ponto | null;
-  onPick?: (lat: number, lng: number) => void;
+  onPick?: ((lat: number, lng: number) => void) | undefined;
   selected?: { lat: number; lng: number } | null;
 }) {
   const el = useRef<HTMLDivElement>(null);
@@ -60,7 +60,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected }: {
         if (!r.ok) throw Error("radar");
         const d = await r.json();
         const frames: Frame[] = (d.radar?.past || []).filter((f: Frame) => Number.isFinite(f.time) && /^\/v2\/radar\//.test(f.path)).slice(-6);
-        if (!frames.length || typeof d.host !== "string" || !/^https:\/\/[^/]*rainviewer\.com$/.test(d.host) || Date.now() - frames[frames.length - 1].time * 1000 > 30 * 60000) throw Error("radar");
+        if (!frames.length || typeof d.host !== "string" || !/^https:\/\/[^/]*rainviewer\.com$/.test(d.host) || Date.now() - frames[frames.length - 1]!.time * 1000 > 30 * 60000) throw Error("radar");
         if (alive) { setRadar({ host: d.host, frames }); setIndex(frames.length - 1); setRadarError(false); }
       } catch { if (alive) { setRadarError(true); setRadar(null); } }
     }
@@ -68,7 +68,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected }: {
     return () => { alive = false; controller.abort(); clearInterval(t); };
   }, [showRadar]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
-  const stale = !!radar && now - radar.frames[radar.frames.length - 1].time * 1000 > 30 * 60000;
+  const stale = !!radar && now - radar.frames[radar.frames.length - 1]!.time * 1000 > 30 * 60000;
   useEffect(() => {
     const m = map.current; if (!m) return;
     layers.current.forEach(l => l.remove()); layers.current = [];
