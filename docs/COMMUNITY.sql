@@ -53,9 +53,9 @@ begin
  select id into rid from ajf_private.reports where author=u and request_id=(payload->>'request_id')::uuid;
  if found then return rid; end if;
  delete from ajf_private.reports where received_at<now()-interval '7 days';
- if (select count(*) from ajf_private.reports where author=u and received_at>now()-interval '1 hour')>=5
+ if (select count(*) from ajf_private.reports where author=u and received_at>now()-interval '1 hour')>=30
  or exists(select 1 from ajf_private.reports where author=u and received_at>now()-interval '1 minute') then raise exception 'Limite de envios: aguarde antes de tentar novamente'; end if;
- if (select count(*) from ajf_private.reports where received_at>now()-interval '1 hour')>=100 then raise exception 'Limite temporário do serviço. Tente mais tarde'; end if;
+ if (select count(*) from ajf_private.reports where received_at>now()-interval '1 hour')>=300 then raise exception 'Limite temporário do serviço. Tente mais tarde'; end if;
  if exists(select 1 from ajf_private.reports where author=u and not withdrawn and expires_at>now() and lower(street)=lower(s) and lower(neighborhood)=lower(n) and kind=k) then raise exception 'Você já enviou um relato recente para esse local'; end if;
  insert into ajf_private.reports(author,request_id,street,neighborhood,kind,description,lat,lng,observed_at,expires_at)
  values(u,(payload->>'request_id')::uuid,s,n,k,d,la,lo,t,t+interval '2 hours') returning id into rid;
