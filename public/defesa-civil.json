@@ -2,6 +2,15 @@
   "fonte": "Defesa Civil Alerta (IDAP/MIDR)",
   "alertas": [
     {
+      "id": "199814/2026",
+      "evento": "CHUVAS INTENSAS",
+      "texto": "Alerta de tempestade acompanhado de raios e rajadas de vento. Fonte: PJF 22/11 12:45",
+      "emitido": "2026-11-22T12:38:52-03:00",
+      "expira": "2026-11-23T07:00:00-03:00",
+      "severidade": "Moderate",
+      "origem": "Defesa Civil de Juiz de Fora (MG)"
+    },
+    {
       "id": "199704/2026",
       "evento": "CHUVAS INTENSAS",
       "texto": "Alerta de tempestade com rajadas de vento e chuva moderada a forte com duração de 02:00h. Proteja-se!",
