@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Ponto } from "@/lib/pontos";
-import type { RainViewerData } from "@/lib/rainviewer";
 
 const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", sem_luz: "💡", relato: "📍" };
 const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", sem_luz: "#6b5bb5", relato: "#127e86" };
-export default function RainMap({ pontos, showRadar, foco, onPick, selected, radarFrames, rv }: {
+export default function RainMap({ pontos, showRadar, foco, onPick, selected, radarFrames, radarStatus }: {
   radarFrames?: { time: string; url: string; bbox: number[] }[] | undefined; radarStatus?: string | undefined;
-  rv?: RainViewerData | null | undefined;
   pontos: Ponto[]; showRadar: boolean; foco: Ponto | null;
   onPick?: ((lat: number, lng: number) => void) | undefined;
   selected?: { lat: number; lng: number } | null;
@@ -54,56 +52,43 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   }, [onPick]);
   useEffect(() => { if (foco) map.current?.flyTo([foco.lat, foco.lng], 15); }, [foco]);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
-  const rvFrames = rv?.frames.length ? rv.frames : null;
-  const rvStale = !rvFrames || now - rvFrames[rvFrames.length - 1]!.time * 1000 > 30 * 60000;
-  const inpeStale = !!radar && now - Date.parse(radar[radar.length - 1]!.time) > 90 * 60000;
-  const source: "rainviewer" | "inpe" | null = rvFrames && !rvStale ? "rainviewer" : radar && !inpeStale ? "inpe" : null;
-  const frameCount = source === "rainviewer" ? rvFrames!.length : source === "inpe" ? radar!.length : 0;
+  const stale = !!radar && now - Date.parse(radar[radar.length - 1]!.time) > 90 * 60000;
   useEffect(() => {
     const m = map.current; if (!m) return;
     layers.current.forEach(l => l.remove()); layers.current = [];
-    if (source === "rainviewer" && rv && showRadar) {
-      layers.current = rvFrames!.map(f => {
-        const layer = L.tileLayer(`${rv.host}${f.path}/256/{z}/{x}/{y}/4/1_1.png`, { maxNativeZoom: 7, opacity: 0, zIndex: 400, attribution: 'Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>' });
-        layer.on("tileerror", () => setRadarError(true));
-        return layer.addTo(m);
-      });
-    } else if (source === "inpe" && radar && showRadar) {
-      layers.current = radar.map(f => {
-        const [west, south, east, north] = f.bbox as [number, number, number, number];
-        const image = new Image(); image.src = f.url;
-        const makeTile = (coords: L.Coords, done: L.DoneCallback) => {
-          const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 256;
-          const paint = () => {
-            const ctx = canvas.getContext("2d"); if (!ctx) { done(undefined, canvas); return; }
-            const left = m.unproject(L.point(coords.x * 256, coords.y * 256), coords.z).lng;
-            const right = m.unproject(L.point((coords.x + 1) * 256, coords.y * 256), coords.z).lng;
-            const sx = (left - west) / (east - west) * image.width;
-            const sw = (right - left) / (east - west) * image.width;
-            for (let y = 0; y < 256; y++) {
-              const latTop = m.unproject(L.point(coords.x * 256, coords.y * 256 + y), coords.z).lat;
-              const latBottom = m.unproject(L.point(coords.x * 256, coords.y * 256 + y + 1), coords.z).lat;
-              const sy = (north - latTop) / (north - south) * image.height;
-              const sh = (latTop - latBottom) / (north - south) * image.height;
-              if (sy >= 0 && sy < image.height) ctx.drawImage(image, sx, sy, sw, Math.max(sh, .01), 0, y, 256, 1);
-            }
-            done(undefined, canvas);
-          };
-          if (image.complete && image.naturalWidth) paint();
-          else { image.addEventListener("load", paint, { once: true }); image.addEventListener("error", () => { setRadarError(true); done(new Error("Radar indisponível"), canvas); }, { once: true }); }
-          return canvas;
+    if (radar && !stale && showRadar) layers.current = radar.map(f => {
+      const [west, south, east, north] = f.bbox as [number, number, number, number];
+      const image = new Image(); image.src = f.url;
+      class RadarLayer extends L.GridLayer { public override createTile(coords: L.Coords, done: L.DoneCallback): HTMLElement { return makeTile(coords, done); } }
+      const layer = new RadarLayer({ opacity: 0, zIndex: 400, attribution: '<a href="https://data.inpe.br/dados/radares-meteorologicos/">Radar: INPE / DECEA</a>' });
+      const makeTile = (coords: L.Coords, done: L.DoneCallback) => {
+        const canvas = document.createElement("canvas"); canvas.width = 256; canvas.height = 256;
+        const paint = () => {
+          const ctx = canvas.getContext("2d"); if (!ctx) { done(undefined, canvas); return; }
+          const left = m.unproject(L.point(coords.x * 256, coords.y * 256), coords.z).lng;
+          const right = m.unproject(L.point((coords.x + 1) * 256, coords.y * 256), coords.z).lng;
+          const sx = (left - west) / (east - west) * image.width;
+          const sw = (right - left) / (east - west) * image.width;
+          for (let y = 0; y < 256; y++) {
+            const latTop = m.unproject(L.point(coords.x * 256, coords.y * 256 + y), coords.z).lat;
+            const latBottom = m.unproject(L.point(coords.x * 256, coords.y * 256 + y + 1), coords.z).lat;
+            const sy = (north - latTop) / (north - south) * image.height;
+            const sh = (latTop - latBottom) / (north - south) * image.height;
+            if (sy >= 0 && sy < image.height) ctx.drawImage(image, sx, sy, sw, Math.max(sh, .01), 0, y, 256, 1);
+          }
+          done(undefined, canvas);
         };
-        class RadarLayer extends L.GridLayer { public override createTile(coords: L.Coords, done: L.DoneCallback): HTMLElement { return makeTile(coords, done); } }
-        return new RadarLayer({ opacity: 0, zIndex: 400, attribution: '<a href="https://data.inpe.br/dados/radares-meteorologicos/">Radar: INPE / DECEA</a>' }).addTo(m);
-      });
-    }
+        if (image.complete && image.naturalWidth) paint();
+        else { image.addEventListener("load", paint, { once: true }); image.addEventListener("error", () => { setRadarError(true); done(new Error("Radar indisponível"), canvas); }, { once: true }); }
+        return canvas;
+      };
+      return layer.addTo(m);
+    });
     return () => { layers.current.forEach(l => l.remove()); layers.current = []; };
-  }, [source, rv, radarFrames, showRadar]);
-  useEffect(() => { layers.current.forEach((l, i) => l.setOpacity(i === index && !radarError ? .55 : 0)); }, [index, source, rv, radarFrames, radarError, showRadar]);
-  useEffect(() => { if (!frameCount || !playing) return; const t = setInterval(() => setIndex(i => (i + 1) % frameCount), source === "rainviewer" ? 900 : 1600); return () => clearInterval(t); }, [source, frameCount, playing]);
-  useEffect(() => { setRadarError(false); setIndex(Math.max(0, frameCount - 1)); }, [source, rv, radarFrames]);
-  const current = source === "rainviewer" && rvFrames ? rvFrames[Math.min(index, rvFrames.length - 1)]! : source === "inpe" && radar ? radar[Math.min(index, radar.length - 1)]! : null;
-  const currentTime = current ? (typeof current.time === "number" ? current.time * 1000 : Date.parse(current.time)) : null;
-  const ageMin = currentTime ? Math.max(0, Math.round((now - currentTime) / 60000)) : null;
-  return <div style={{ height: "100%", position: "relative" }}><div ref={el} style={{ height: "100%" }}/><div className="map-views"><button onClick={() => map.current?.setView([-21.7642, -43.3503], 9)}>Região / chuva</button><button onClick={() => map.current?.setView([-21.7642, -43.3503], 13)}>Ruas de JF</button></div>{basemapError && <div className="radar-status" role="status">Mapa de fundo indisponível. Consulte a lista de relatos ao lado.</div>}{showRadar && <div className="radar-status" role="status">{radarError || !source ? "Radar recente indisponível. Mapa vazio não indica ausência de chuva." : currentTime !== null ? <><button onClick={() => setPlaying(p => !p)} aria-label={playing ? "Pausar animação" : "Animar radar"} style={{ border: 0, background: "transparent", marginRight: 8 }}>{playing ? "❚❚" : "▶"}</button>{source === "rainviewer" ? "RainViewer · mosaico de radares" : "INPE / Pico do Couto"} · {new Date(currentTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} · há {ageMin} min. Ecos de chuva medidos por radar, não previsão.</> : "Consultando radar passado…"}</div>}</div>;
-               }
+  }, [radarFrames, stale, showRadar]);
+  useEffect(() => { layers.current.forEach((l, i) => l.setOpacity(i === index && !radarError ? .55 : 0)); }, [index, radarFrames, radarError, showRadar]);
+  useEffect(() => { if (!radar || !playing || stale) return; const t = setInterval(() => setIndex(i => (i + 1) % radar.length), 1600); return () => clearInterval(t); }, [radarFrames, playing, stale]);
+  useEffect(() => { setRadarError(false); setIndex(Math.max(0, (radarFrames?.length || 1) - 1)); }, [radarFrames]);
+  const current = radar?.[index] || radar?.[radar.length - 1];
+  return <div style={{ height: "100%", position: "relative" }}><div ref={el} style={{ height: "100%" }}/><div className="map-views"><button onClick={() => map.current?.setView([-21.7642, -43.3503], 9)}>Região / chuva</button><button onClick={() => map.current?.setView([-21.7642, -43.3503], 13)}>Ruas de JF</button></div>{basemapError && <div className="radar-status" role="status">Mapa de fundo indisponível. Consulte a lista de relatos ao lado.</div>}{showRadar && <div className="radar-status" role="status">{radarError || stale || radarStatus === "error" ? "Radar recente indisponível. Mapa vazio não indica ausência de chuva." : current ? <><button onClick={() => setPlaying(p => !p)} aria-label={playing ? "Pausar animação" : "Animar radar"} style={{ border: 0, background: "transparent", marginRight: 8 }}>{playing ? "❚❚" : "▶"}</button>INPE / Pico do Couto · {new Date(current.time).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} · há {Math.max(0, Math.round((now - Date.parse(current.time)) / 60000))} min. Ecos de chuva em altitude, não previsão.</> : "Consultando radar passado…"}</div>}</div>;
+                                                                                                                                      }
