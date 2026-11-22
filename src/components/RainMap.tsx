@@ -21,7 +21,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   const radar = radarFrames?.length ? radarFrames : null;
   const [radarError, setRadarError] = useState(false);
   const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [basemapError, setBasemapError] = useState(false);
   useEffect(() => {
@@ -60,6 +60,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   const inpeStale = !!radar && now - Date.parse(radar[radar.length - 1]!.time) > 90 * 60000;
   const source: "rainviewer" | "inpe" | null = rvFrames && !rvStale ? "rainviewer" : radar && !inpeStale ? "inpe" : null;
   const frameCount = source === "rainviewer" ? rvFrames!.length : source === "inpe" ? radar!.length : 0;
+  const lastPastIndex = source === "rainviewer" && rvFrames ? Math.max(0, rvFrames.reduce((acc, f, i) => (f.forecast ? acc : i), 0)) : Math.max(0, frameCount - 1);
   useEffect(() => {
     const m = map.current; if (!m) return;
     layers.current.forEach(l => l.remove()); layers.current = [];
@@ -102,10 +103,13 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   }, [source, rv, radarFrames, showRadar]);
   useEffect(() => { layers.current.forEach((l, i) => l.setOpacity(i === index && !radarError ? .55 : 0)); }, [index, source, rv, radarFrames, radarError, showRadar]);
   useEffect(() => { if (!frameCount || !playing) return; const t = setInterval(() => setIndex(i => (i + 1) % frameCount), source === "rainviewer" ? 900 : 1600); return () => clearInterval(t); }, [source, frameCount, playing]);
-  useEffect(() => { setRadarError(false); setIndex(Math.max(0, frameCount - 1)); }, [source, rv, radarFrames]);
+  useEffect(() => { setRadarError(false); setIndex(lastPastIndex); }, [source, rv, radarFrames, lastPastIndex]);
+  useEffect(() => { if (!playing) setIndex(lastPastIndex); }, [playing, lastPastIndex]);
   const current = source === "rainviewer" && rvFrames ? rvFrames[Math.min(index, rvFrames.length - 1)]! : source === "inpe" && radar ? radar[Math.min(index, radar.length - 1)]! : null;
   const currentTime = current ? (typeof current.time === "number" ? current.time * 1000 : Date.parse(current.time)) : null;
   const ageMin = currentTime ? Math.max(0, Math.round((now - currentTime) / 60000)) : null;
-  return <div style={{ height: "100%", position: "relative" }}><div ref={el} style={{ height: "100%" }}/><div className="map-views"><button onClick={() => map.current?.setView([-21.7642, -43.3503], 9)}>Região / chuva</button><button onClick={() => map.current?.setView([-21.7642, -43.3503], 13)}>Ruas de JF</button></div>{basemapError && <div className="radar-status" role="status">Mapa de fundo indisponível. Consulte a lista de relatos ao lado.</div>}{showRadar && <div className="radar-status" role="status">{radarError || !source ? "Radar recente indisponível. Mapa vazio não indica ausência de chuva." : currentTime !== null ? <><button onClick={() => setPlaying(p => !p)} aria-label={playing ? "Pausar animação" : "Animar radar"} style={{ border: 0, background: "transparent", marginRight: 8 }}>{playing ? "❚❚" : "▶"}</button>{source === "rainviewer" ? "RainViewer · mosaico de radares" : "INPE / Pico do Couto"} · {new Date(currentTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} · há {ageMin} min. Ecos de chuva medidos por radar, não previsão.</> : "Consultando radar passado…"}</div>}</div>;
+  const currentForecast = source === "rainviewer" && current ? Boolean((current as { forecast?: boolean }).forecast) : false;
+  const hasForecast = source === "rainviewer" && !!rvFrames?.some(f => f.forecast);
+  return <div style={{ height: "100%", position: "relative" }}><div ref={el} style={{ height: "100%" }}/><div className="map-views"><button onClick={() => map.current?.setView([-21.7642, -43.3503], 9)}>Região / chuva</button><button onClick={() => map.current?.setView([-21.7642, -43.3503], 13)}>Ruas de JF</button></div>{basemapError && <div className="radar-status" role="status">Mapa de fundo indisponível. Consulte a lista de relatos ao lado.</div>}{showRadar && <div className="radar-status" role="status">{radarError || !source ? "Radar recente indisponível. Mapa vazio não indica ausência de chuva." : currentTime !== null ? <><button onClick={() => setPlaying(p => !p)} aria-label={playing ? "Voltar ao quadro mais recente" : "Animar histórico e previsão do radar"} style={{ border: 0, background: "transparent", marginRight: 8 }}>{playing ? "■" : "▶"}</button>{playing ? <>Animação · quadro {index + 1}/{frameCount} · {new Date(currentTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} · {currentForecast ? `previsão daqui a ${Math.max(0, Math.round((currentTime - now) / 60000))} min` : `há ${ageMin} min`} · ■ volta ao quadro mais recente.</> : <>AO VIVO · {source === "rainviewer" ? "RainViewer · mosaico de radares" : "INPE / Pico do Couto"} · quadro mais recente: {new Date(currentTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })} (há {ageMin} min), atualiza a cada ~10 min. O radar mede a chuva do alto e a imagem chega com alguns minutos de atraso. ▶ anima as últimas 2h{hasForecast ? " e a previsão dos próximos ~30 min" : ""}.</>}</> : "Consultando radar passado…"}</div>}</div>;
                }
 
