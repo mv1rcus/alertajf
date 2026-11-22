@@ -17,7 +17,7 @@ const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}>([^<]+
 export const getEnvironment = createServerFn({ method: "GET" }).handler(async (): Promise<EnvironmentData> => {
   if (cache && Date.now() - cache.at < 10 * 60000) return cache.data;
   const now = new Date();
-  const start = new Date(now.getTime() - 36 * 3600000);
+  const start = new Date(now.getTime() - 7 * 24 * 3600000);
   const anaUrl = `${ANA}?${new URLSearchParams({ codEstacao: "58480501", dataInicio: dayBr(start), dataFim: dayBr(now) })}`;
   const radarUrl = `${RADAR}?${new URLSearchParams({ collections: "br-weather-radar-cappi-1", bbox: "-43.7,-22,-43,-21.4", datetime: `${new Date(now.getTime() - 3 * 3600000).toISOString()}/${now.toISOString()}`, limit: "100" })}`;
   const data: EnvironmentData = {
@@ -37,6 +37,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
         if (Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000 && Number.isFinite(cm) && cm > -10000 && cm < 100000) readings.push({ time, cm });
       }
       readings.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      readings.splice(0, Math.max(0, readings.length - 96));
       if (!readings.length) throw Error("Sem leitura");
       data.river.status = "ok"; data.river.readings = readings;
     })(),
