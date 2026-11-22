@@ -1,9 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 
 type RiverPoint = { time: string; cm: number };
+type RainPoint = { time: string; mm: number };
 export type EnvironmentData = {
   checkedAt: string;
   river: { status: "ok" | "error"; station: string; code: string; source: string; readings: RiverPoint[] };
+  rain: { status: "ok" | "error"; station: string; code: string; source: string; readings: RainPoint[] };
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
 };
@@ -23,6 +25,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
   const data: EnvironmentData = {
     checkedAt: now.toISOString(),
     river: { status: "error", station: "PCH Marmelos Montante 1", code: "58480501", source: anaUrl, readings: [] },
+    rain: { status: "error", station: "PCH Marmelos Montante 1", code: "58480501", source: anaUrl, readings: [] },
     alerts: { status: "error", source: "https://painelalertas.cemaden.gov.br/", updated: "", items: [] },
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
   };
@@ -30,16 +33,24 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     (async () => {
       const xml = await (await get(anaUrl)).text();
       const readings: RiverPoint[] = [];
+      const rainReadings: RainPoint[] = [];
       for (const match of xml.matchAll(/<DadosHidrometereologicos(?:\s[^>]*)?>([\s\S]*?)<\/DadosHidrometereologicos>/g)) {
-        const row = match[1] || ""; const raw = tag(row, "Nivel");
-        if (tag(row, "CodEstacao") !== "58480501" || !raw) continue;
-        const time = tag(row, "DataHora").replace(" ", "T") + "-03:00"; const cm = Number(raw);
-        if (Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000 && Number.isFinite(cm) && cm > -10000 && cm < 100000) readings.push({ time, cm });
+        const row = match[1] || "";
+        if (tag(row, "CodEstacao") !== "58480501") continue;
+        const time = tag(row, "DataHora").replace(" ", "T") + "-03:00";
+        const timeOk = Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000;
+        const raw = tag(row, "Nivel"); const cm = Number(raw);
+        if (timeOk && raw && Number.isFinite(cm) && cm > -10000 && cm < 100000) readings.push({ time, cm });
+        const rawRain = tag(row, "Chuva"); const mm = Number(rawRain);
+        if (timeOk && rawRain && Number.isFinite(mm) && mm >= 0 && mm < 1000) rainReadings.push({ time, mm });
       }
       readings.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
       readings.splice(0, Math.max(0, readings.length - 96));
+      rainReadings.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      rainReadings.splice(0, Math.max(0, rainReadings.length - 48));
       if (!readings.length) throw Error("Sem leitura");
       data.river.status = "ok"; data.river.readings = readings;
+      if (rainReadings.length) { data.rain.status = "ok"; data.rain.readings = rainReadings; }
     })(),
     (async () => {
       const json = await (await get(CEMADEN)).json();
