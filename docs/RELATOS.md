@@ -23,8 +23,8 @@ Os relatos somem da consulta e do mapa 2 horas após a observação. Isso não s
 
 ## Limites e privacidade
 
-- 5 relatos/hora/sessão, intervalo mínimo de 1 minuto.
-- 100 relatos/hora para o projeto, com serialização no banco contra concorrência.
+- 30 relatos/hora/sessão, intervalo mínimo de 1 minuto.
+- 300 relatos/hora para o projeto, com serialização no banco contra concorrência.
 - 30 ações/hora/sessão e 500 ações/hora/projeto.
 - Autenticação Supabase limita por padrão a criação de sessões anônimas a 30/hora por IP; não alterado.
 - Sessão não equivale a pessoa. Apagar armazenamento, trocar navegador ou IP pode contornar parte dos limites. Não anunciar identidade verificada nem proteção absoluta contra spam. CAPTCHA não está configurado; avaliar se houver abuso.
