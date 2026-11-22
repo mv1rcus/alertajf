@@ -69,3 +69,13 @@ export function bairroMaisProximo(lat: number, lon: number): Bairro | null {
   }
   return best;
 }
+
+/** Sugestão por GPS: só dentro da área coberta (até 1,5 km do ponto de um bairro da lista). Fora disso, null. */
+export function sugerirBairro(lat: number, lon: number): { bairro: Bairro; km: number } | null {
+  let best: Bairro | null = null; let bd = Infinity;
+  for (const b of BAIRROS) {
+    const d = Math.hypot((b.lat - lat) * 111, (b.lon - lon) * 95);
+    if (d < bd) { bd = d; best = b; }
+  }
+  return best && bd <= 1.5 ? { bairro: best, km: bd } : null;
+}
