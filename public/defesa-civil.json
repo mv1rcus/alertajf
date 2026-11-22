@@ -2,6 +2,15 @@
   "fonte": "Defesa Civil Alerta (IDAP/MIDR)",
   "alertas": [
     {
+      "id": "manual-sms-2026-11-22-2002",
+      "evento": "CHUVAS INTENSAS",
+      "texto": "Alerta severo de chuvas intensas para Juiz de Fora. Risco de inundações, alagamentos e deslizamentos. Proteja-se! (Recebido por SMS/cell broadcast da Defesa Civil às 20:02 de 22/11; ainda sem registro no feed público IDAP.)",
+      "emitido": "2026-11-22T20:02:00-03:00",
+      "expira": "2026-11-23T12:00:00-03:00",
+      "severidade": "Severe",
+      "origem": "Defesa Civil de Juiz de Fora (MG)"
+    },
+    {
       "id": "199814/2026",
       "evento": "CHUVAS INTENSAS",
       "texto": "Alerta de tempestade acompanhado de raios e rajadas de vento. Fonte: PJF 22/11 12:45",
