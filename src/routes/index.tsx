@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Suspense, useEffect, useState } from "react";
 import { Zap, CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw, Share2, Smartphone } from "lucide-react";
 import { useAvisos } from "@/lib/inmet";
+import { BAIRROS, buscarBairros, sugerirBairro, type Bairro } from "@/lib/bairros";
 import { useAlertaDC, horaAlertaDC } from "@/lib/defesacivil";
 import { VentoCard } from "@/components/VentoCard";
 import { buscarRaios, type Raios } from "@/lib/raios";
@@ -72,6 +73,11 @@ function Index() {
   const [rvError, setRvError] = useState(false);
   const [installEvent, setInstallEvent] = useState<{ prompt: () => Promise<void> } | null>(null);
   const [installDismissed, setInstallDismissed] = useState(true);
+  const [bairro, setBairro] = useState<Bairro | null>(null);
+  const [bairroQuery, setBairroQuery] = useState("");
+  const [bairroOpen, setBairroOpen] = useState(false);
+  const [gpsNote, setGpsNote] = useState("");
+  const [gpsSugestao, setGpsSugestao] = useState<Bairro | null>(null);
   useEffect(() => { setMounted(true); const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
   useEffect(() => {
     setInstallDismissed(window.localStorage.getItem("ajf-install-off") === "1");
@@ -81,11 +87,29 @@ function Index() {
   }, []);
   useEffect(() => { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); }, []);
   useEffect(() => {
+    try { const saved = window.localStorage.getItem("ajf-bairro"); if (saved) { const found = BAIRROS.find((b) => b.nome === saved); if (found) setBairro(found); } } catch { /* sem armazenamento */ }
+  }, []);
+  function escolherBairro(b: Bairro | null) {
+    setGpsSugestao(null); setGpsNote("");
+    setBairro(b); setBairroQuery(""); setBairroOpen(false); setGpsNote("");
+    try { if (b) window.localStorage.setItem("ajf-bairro", b.nome); else window.localStorage.removeItem("ajf-bairro"); } catch { /* sem armazenamento */ }
+  }
+  function usarGpsBairro() {
+    if (!("geolocation" in navigator)) { setGpsNote("Este aparelho não informa a localização. Escolha o bairro na lista."); return; }
+    setGpsSugestao(null); setGpsNote("Consultando sua localização…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { const r = sugerirBairro(pos.coords.latitude, pos.coords.longitude); if (r) { setGpsSugestao(r.bairro); setGpsNote(`Sua localização parece ficar perto de ${r.bairro.nome}. Confirme para usar a previsão desse bairro.`); } else { setGpsSugestao(null); setGpsNote("Sua localização está fora da área coberta pela lista de bairros. Mostrando a previsão da cidade; escolha um bairro na lista se quiser."); } },
+      () => setGpsNote("Não foi possível acessar sua localização. Escolha o bairro na lista."),
+      { timeout: 10000, maximumAge: 300000 },
+    );
+  }
+  useEffect(() => {
     let alive = true;
     const controller = new AbortController();
     async function load() {
       try {
-        const response = await fetch("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503&hourly=precipitation,precipitation_probability&forecast_days=2&timezone=America%2FSao_Paulo", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
+        const lat = bairro ? bairro.lat : -21.7642; const lon = bairro ? bairro.lon : -43.3503;
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation,precipitation_probability&forecast_days=2&timezone=America%2FSao_Paulo`, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
         if (!response.ok) throw Error("forecast");
         const data = await response.json();
         if (!Array.isArray(data.hourly?.time)) throw Error("forecast");
@@ -95,9 +119,10 @@ function Index() {
       } catch { if (alive) setWeatherError(true); }
       finally { if (alive) setLoading(false); }
     }
+    setLoading(true);
     void load(); const interval = setInterval(load, 15 * 60000);
     return () => { alive = false; controller.abort(); clearInterval(interval); };
-  }, [refresh]);
+  }, [refresh, bairro]);
   useEffect(() => {
     if (!API) { setReportsStatus("unconfigured"); return; }
     let alive = true;
@@ -146,7 +171,7 @@ function Index() {
   const riverVerdict = !environment ? "Consultando o Rio Paraibuna" : river && !environmentStale ? `Rio Paraibuna ${riverTrend}` : "Rio Paraibuna sem leitura recente";
   const riverShare = river && !environmentStale ? `Rio Paraibuna agora: ${(river.cm / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m na estação Marmelos, ${riverTrend}. Dados ANA via Alerta JF (projeto independente): ${SITE}` : `Nível do Rio Paraibuna e previsão de chuva em Juiz de Fora, via Alerta JF (projeto independente): ${SITE}`;
   const raiosShare = raios && !raiosError && raios.descargas > 0 ? `Raios agora em Juiz de Fora: ${raios.descargas} descargas na última leitura do INPE. Acompanhe no Alerta JF (projeto independente): ${SITE}` : `Raios, chuva e Rio Paraibuna em Juiz de Fora, no Alerta JF (projeto independente): ${SITE}`;
-  const forecastShare = `${rainVerdict} em Juiz de Fora. Previsão hora a hora, Rio Paraibuna e relatos da cidade no Alerta JF (projeto independente): ${SITE}/#previsao`;
+  const forecastShare = `${rainVerdict}${bairro ? ` no bairro ${bairro.nome}` : ""} em Juiz de Fora. Previsão hora a hora, Rio Paraibuna e relatos da cidade no Alerta JF (projeto independente): ${SITE}/#previsao`;
   const visibleReports = liveReports.filter(r => (kind === "all" || r.kind === kind) && `${r.street} ${r.neighborhood}`.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR")));
   const toPoint = (r: Report): Ponto => ({ id: r.id, nome: r.street, descricao: `${labels[r.kind]} · ${dateTime(r.observed_at)} · Relato da comunidade, não verificado · ${r.seen_count} apoios`, lat: r.lat, lng: r.lng, tipo: r.kind });
   function gps() {
@@ -189,7 +214,7 @@ function Index() {
     <main id="main">
       <div className="eyebrow">PAINEL AMBIENTAL · JUIZ DE FORA / MG</div>
       <section className="intro"><div><h1>Juiz de Fora.<br/><span>De olho no tempo.</span></h1><p>Radar de chuva, Rio Paraibuna e ocorrências da cidade. Dados com origem e horário, sem falsa sensação de segurança.</p></div><div className="independent"><ShieldCheck size={21}/><span>Projeto independente<br/><small>Não substitui os canais oficiais.</small></span></div></section>
-      <section className="verdict" aria-live="polite"><CloudRain size={20}/><div className="verdict-text"><p><b>Agora em JF:</b> {rainVerdict} · {riverVerdict}{avisos.length > 0 ? ` · Aviso INMET: ${avisos[0].descricao}` : ""}</p>{statusDC === "ok" && (alertaDC ? <p className="dc"><b>Último alerta da Defesa Civil</b> ({horaAlertaDC(alertaDC.emitido)}): {alertaDC.texto} <small>{Date.parse(alertaDC.expira) > Date.now() ? `Em vigor até ${horaAlertaDC(alertaDC.expira)}` : "Encerrado"} · {alertaDC.origem} · via Defesa Civil Alerta</small></p> : <p className="dc"><b>Defesa Civil:</b> nenhum alerta recente para JF. <small>Fonte: Defesa Civil Alerta</small></p>)}</div></section>
+      <section className="verdict" aria-live="polite"><CloudRain size={20}/><div className="verdict-text"><p><b>Agora em JF:</b> {rainVerdict}{bairro ? ` (previsão do bairro ${bairro.nome})` : ""} · {riverVerdict}{avisos.length > 0 ? ` · Aviso INMET: ${avisos[0].descricao}` : ""}</p>{statusDC === "ok" && (alertaDC ? <p className="dc"><b>Último alerta da Defesa Civil</b> ({horaAlertaDC(alertaDC.emitido)}): {alertaDC.texto} <small>{Date.parse(alertaDC.expira) > Date.now() ? `Em vigor até ${horaAlertaDC(alertaDC.expira)}` : "Encerrado"} · {alertaDC.origem} · via Defesa Civil Alerta</small></p> : <p className="dc"><b>Defesa Civil:</b> nenhum alerta recente para JF. <small>Fonte: Defesa Civil Alerta</small></p>)}</div></section>
       {showInstall && <section className="install-banner"><Smartphone size={22}/><div><b>Alerta JF na tela inicial do seu celular</b><p>{isIOS ? "No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”." : "Adicione o app para abrir rápido quando a chuva chegar. É gratuito e não passa por loja de aplicativos."}</p></div>{installEvent && <button className="primary" onClick={() => { void installEvent.prompt(); }}>Adicionar</button>}<button className="text-btn" aria-label="Dispensar" onClick={() => { setInstallDismissed(true); try { window.localStorage.setItem("ajf-install-off", "1"); } catch { /* sem armazenamento */ } }}><X size={15}/></button></section>}
       <section className="environment-cards" aria-label="Situação ambiental">
         <article className="card env-card"><div className="eyebrow">RIO PARAIBUNA · ANA</div><h3>Nível na estação Marmelos</h3><strong className="big-number">{river && !environmentStale ? `${(river.cm / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m` : "Sem leitura"}</strong><p>{river && !environmentStale ? `Cota da régua · ${previousRiver ? river.cm > previousRiver.cm ? "subiu" : river.cm < previousRiver.cm ? "desceu" : "sem variação" : "sem comparação"} desde a leitura anterior` : "Não há medição recente validada nesta consulta."}</p><small>{river ? `${dateTime(river.time)} · há ${riverAge} min${riverAge !== null && riverAge > 120 ? " · leitura atrasada" : ""}` : "Aguardando ANA"}</small><details><summary>Sobre esta medição</summary><p>Estação 58480501, PCH Marmelos Montante 1. É cota em uma régua, não a profundidade do rio nem nível de toda a cidade. Sem limite local de transbordamento validado. Dados telemétricos podem atrasar ou conter erros.</p><a href={environment?.river.source || "https://telemetriaws1.ana.gov.br/ServiceANA.asmx"} target="_blank" rel="noreferrer">Ver fonte ANA ↗</a></details><a className="wa-share" href={waShare(riverShare)} onClick={shareTap(riverShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></article>
@@ -204,8 +229,8 @@ function Index() {
       <div className="street-grid"><div className="map-card card"><div className="section-line map-heading"><b><MapPin size={17}/>Radar e ocorrências</b><label className="radar-toggle"><input type="checkbox" checked={radar} onChange={e => setRadar(e.target.checked)}/>Camada de chuva</label></div><div className="map-area">{mounted && <Suspense fallback={<p>Carregando mapa…</p>}><MapBoundary><RainMap pontos={reportsStatus === "ready" ? visibleReports.map(toPoint) : []} showRadar={radar} foco={focus} radarFrames={!environmentStale ? environment?.radar.frames : []} radarStatus={environmentStale ? "error" : environment?.radar.status} rv={rvError ? null : rv} onPick={showForm && !!API ? (lat, lng) => { if (validLocation(lat, lng)) { setLocation({ lat, lng }); setLocationNote("Confira a rua e o ponto antes de enviar."); } } : undefined} selected={location}/></MapBoundary></Suspense>}</div><p className="caption map-caption">{showForm && API ? "Toque no local da ocorrência para marcar. " : ""}Sem marcadores não significa caminho seguro. Nunca atravesse uma área alagada.</p></div>
       <div className="report-list card"><div className="section-line"><h3>Relatos recentes</h3><span className="count">{reportsStatus === "ready" ? visibleReports.length : "—"}</span></div><label className="sr-label" htmlFor="search">Buscar rua ou bairro</label><input id="search" type="search" placeholder="Buscar rua ou bairro" value={query} onChange={e => setQuery(e.target.value)}/><label className="sr-label" htmlFor="kind">Filtrar tipo</label><select id="kind" value={kind} onChange={e => setKind(e.target.value)}><option value="all">Todos os tipos</option>{Object.entries(labels).map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select>{reportsStatus !== "ready" ? <div className="empty"><MapPin size={30}/><b>{reportsStatus === "unconfigured" ? "Ainda sem relatos compartilhados" : reportsStatus === "error" ? "Relatos indisponíveis" : "Consultando relatos…"}</b><p>{reportsStatus === "error" ? "A consulta falhou. Não é possível afirmar quais ruas estão livres." : "Quando o serviço estiver ativo, os relatos da comunidade aparecerão aqui."}</p></div> : visibleReports.length === 0 ? <div className="empty"><ShieldCheck size={30}/><b>Nenhum relato recente encontrado</b><p>Isso não confirma que as ruas estão livres de alagamento.</p></div> : <ul className="incidents">{visibleReports.map(r => <li key={r.id}><button onClick={() => setFocus(toPoint(r))}><span className="incident-kind">{labels[r.kind]}</span><b>{r.street}</b><span>{r.neighborhood}</span><p>{r.description}</p><small>Relato da comunidade · não verificado<br/>Observado em {dateTime(r.observed_at)}<br/>Sai do mapa às {clock(r.expires_at)}</small></button><div className="report-actions"><button className="secondary" disabled={acting} onClick={() => react(r.id, "seen")}>Também vi · {r.seen_count}</button><a className="text-btn wa-link" href={waShare(reportShare(r))} onClick={shareTap(reportShare(r))} target="_blank" rel="noopener noreferrer">WhatsApp</a><button className="text-btn" disabled={acting} onClick={() => react(r.id, "flag")}>Denunciar</button><button className="text-btn" disabled={acting} onClick={() => react(r.id, "withdraw")}>Retirar meu relato</button></div></li>)}</ul>}<p role="status" className="caption">{actionNote}</p><button className="text-btn" onClick={() => setRefresh(r => r + 1)}>Atualizar relatos</button>{reportsAt && <p className="caption">Consulta às {clock(reportsAt)}. Relatos vencidos saem automaticamente da lista.</p>}</div></div></section>
       <section id="previsao" className="weather card" aria-labelledby="forecast-title">
-        <div className="weather-summary"><div className="eyebrow">PREVISÃO · PRÓXIMAS HORAS</div><CloudRain size={42} strokeWidth={1.4}/><h2 id="forecast-title">{loading ? "Consultando a previsão" : weatherStale ? "Previsão indisponível" : wet ? `Chuva prevista na faixa das ${clock(wet.time)}` : "Pouca chuva prevista nas próximas horas"}</h2><p>{weatherStale ? "Não há dados recentes suficientes. Isso não significa ausência de chuva ou de risco." : "Estimativa para a cidade. Pode chover em um bairro e não em outro."}</p><small><Clock3 size={13}/>{forecast ? `Consulta às ${clock(forecast.fetchedAt)}${weatherStale ? " · dados sem validade atual" : ""}` : "Aguardando dados"}</small><a className="wa-share" href={waShare(forecastShare)} onClick={shareTap(forecastShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></div>
-        <div className="hours-panel"><div className="section-line"><b>Chuva hora a hora</b><button className="text-btn" onClick={() => { setLoading(true); setRefresh(r => r + 1); }} disabled={loading}><RefreshCw size={14}/>Atualizar</button></div>{!weatherStale ? <div className="hours">{hours.map(h => <div className="hour" key={h.time}><b>{clock(h.time)}</b><CloudRain size={23} color={h.mm > 0 ? "#127e86" : "#8e9ba4"}/><strong>{h.probability}%</strong><span>{h.mm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mm</span></div>)}</div> : <div className="weather-empty">{loading ? "Carregando previsão…" : "Tente atualizar em alguns instantes. Consulte também os avisos oficiais abaixo."}</div>}<p className="caption">Probabilidade (%) e volume previsto por hora (mm). Previsão por modelos, não medição na sua rua. <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Dados: Open-Meteo</a>.</p></div>
+        <div className="weather-summary"><div className="eyebrow">PREVISÃO · PRÓXIMAS HORAS</div><CloudRain size={42} strokeWidth={1.4}/><h2 id="forecast-title">{loading ? "Consultando a previsão" : weatherStale ? "Previsão indisponível" : wet ? `Chuva prevista na faixa das ${clock(wet.time)}` : "Pouca chuva prevista nas próximas horas"}</h2><p>{weatherStale ? "Não há dados recentes suficientes. Isso não significa ausência de chuva ou de risco." : bairro ? `Estimativa para o bairro ${bairro.nome}. Vizinhos podem ter chuva diferente.` : "Estimativa para a cidade. Pode chover em um bairro e não em outro."}</p><small><Clock3 size={13}/>{forecast ? `Consulta às ${clock(forecast.fetchedAt)}${weatherStale ? " · dados sem validade atual" : ""}` : "Aguardando dados"}</small><a className="wa-share" href={waShare(forecastShare)} onClick={shareTap(forecastShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></div>
+        <div className="hours-panel"><div className="bairro-picker"><MapPin size={15}/>{bairro ? <span className="bairro-chip">Previsão para <b>{bairro.nome}</b><button className="text-btn" aria-label="Voltar para a previsão da cidade" onClick={() => escolherBairro(null)}><X size={13}/></button></span> : <div className="bairro-search"><label className="sr-label" htmlFor="bairro">Escolha seu bairro</label><input id="bairro" type="search" placeholder="Previsão no seu bairro: digite para buscar" value={bairroQuery} autoComplete="off" onChange={(e) => { setBairroQuery(e.target.value); setBairroOpen(true); }} onFocus={() => setBairroOpen(true)} onBlur={() => setTimeout(() => setBairroOpen(false), 150)}/>{bairroOpen && <ul className="bairro-list">{buscarBairros(bairroQuery).slice(0, 8).map((b) => <li key={b.nome}><button type="button" onMouseDown={(e) => { e.preventDefault(); escolherBairro(b); }}>{b.nome}</button></li>)}{buscarBairros(bairroQuery).length === 0 && <li className="bairro-vazio">Esse bairro ainda não está na lista. Use a localização do aparelho.</li>}</ul>}</div>}<button type="button" className="secondary gps-btn" onClick={usarGpsBairro}><Navigation size={13}/>Usar minha localização</button></div>{gpsNote && <p className="caption" role="status">{gpsNote}{gpsSugestao && <> <button type="button" className="secondary" onClick={() => escolherBairro(gpsSugestao)}>Usar {gpsSugestao.nome}</button> <button type="button" className="text-btn" onClick={() => { setGpsSugestao(null); setGpsNote(""); }}>Não</button></>}</p>}<div className="section-line"><b>Chuva hora a hora{bairro ? ` · ${bairro.nome}` : ""}</b><button className="text-btn" onClick={() => { setLoading(true); setRefresh(r => r + 1); }} disabled={loading}><RefreshCw size={14}/>Atualizar</button></div>{!weatherStale ? <div className="hours">{hours.map(h => <div className="hour" key={h.time}><b>{clock(h.time)}</b><CloudRain size={23} color={h.mm > 0 ? "#127e86" : "#8e9ba4"}/><strong>{h.probability}%</strong><span>{h.mm.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mm</span></div>)}</div> : <div className="weather-empty">{loading ? "Carregando previsão…" : "Tente atualizar em alguns instantes. Consulte também os avisos oficiais abaixo."}</div>}<p className="caption">Probabilidade (%) e volume previsto por hora (mm). Previsão por modelos, não medição na sua rua. <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Dados: Open-Meteo</a>.</p></div>
       </section>
       <section className="official card" aria-label="Avisos oficiais do INMET"><div className="official-label"><ShieldCheck size={20}/><b>Avisos oficiais</b><span>INMET</span></div>{officialStatus === "carregando" ? <p>Consultando o INMET…</p> : officialStatus === "erro" ? <p>Não foi possível consultar os avisos. <a href="https://portal.inmet.gov.br/avisos" target="_blank" rel="noreferrer">Consultar no INMET ↗</a></p> : avisos.length === 0 ? <p>Nenhum aviso ativo encontrado para JF. Isso não garante ausência de risco.</p> : <div className="official-list">{avisos.map(a => <details key={a.id}><summary>{a.descricao} · {a.severidade}<span>Ver orientações +</span></summary><p>De {a.inicio} até {a.fim}.</p>{a.riscos && <p>{a.riscos}</p>}<ul>{a.instrucoes.map((t, i) => <li key={i}>{t}</li>)}</ul></details>)}</div>}{atualizado && <small>Consulta: {atualizado}</small>}</section>
       <section className="help"><div><ShieldCheck size={25}/><div><h3>Receba os alertas da Defesa Civil</h3><p>Envie seu CEP por SMS para <b>40199</b>. O cadastro é gratuito.</p></div></div><a href="https://www.gov.br/pt-br/servicos/solicitar-cadastro-para-recebimento-de-avisos-e-alertas-de-desastres" target="_blank" rel="noreferrer">Como se cadastrar <ArrowUpRight size={16}/></a></section>
@@ -253,6 +278,23 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 .ajf .environment-cards>.env-card:nth-child(5){order:1}.ajf .environment-cards>.env-card:nth-child(3){order:2}.ajf .environment-cards>.env-card:nth-child(4){order:3}.ajf .environment-cards>.env-card:nth-child(1){order:4}.ajf .environment-cards>.env-card:nth-child(2){order:5}
 }
 
+.ajf .bairro-picker{display:flex;align-items:center;gap:8px;margin-bottom:14px;color:#537580}
+.ajf .bairro-search{position:relative;flex:1;min-width:0}
+.ajf .bairro-search input{width:100%}
+.ajf .bairro-list{position:absolute;z-index:600;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #dfe7eb;border-radius:10px;list-style:none;margin:0;padding:5px;max-height:230px;overflow:auto;box-shadow:0 8px 22px #21384a22}
+.ajf .bairro-list button{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 11px;border-radius:7px;font-size:12px;color:#294653}
+.ajf .bairro-list button:hover{background:#eef5f5}
+.ajf .bairro-vazio{padding:9px 11px;font-size:11px;color:#6c7d88}
+.ajf .bairro-chip{display:inline-flex;align-items:center;gap:6px;background:#e9f5f3;color:#127e86;padding:7px 10px;border-radius:9px;font-size:12px}
+.ajf .bairro-chip b{font-weight:600}
+.ajf .gps-btn{padding:9px 12px;font-size:11px;white-space:nowrap;flex:none}
+@media(max-width:480px){.ajf .bairro-list button{padding:13px 11px}.ajf .bairro-picker{flex-wrap:wrap}.ajf .gps-btn{width:100%}}
+.ajf .bairro-picker{color:#6ea4b4}
+.ajf .bairro-list{background:#142536;border-color:#2a4254;box-shadow:0 8px 22px #0008}
+.ajf .bairro-list button{color:#c0d5e1}
+.ajf .bairro-list button:hover{background:#1a3040}
+.ajf .bairro-vazio{color:#8da7b8}
+.ajf .bairro-chip{background:#123039;color:#55c6c2}
 `;
 
 
