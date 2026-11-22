@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Suspense, useEffect, useState } from "react";
-import { Zap, CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw, Share2, Smartphone } from "lucide-react";
+import { Zap, CloudRain, ArrowUpRight, MapPin, ShieldCheck, Clock3, Plus, X, Navigation, RefreshCw, Share2 } from "lucide-react";
 import { useAvisos } from "@/lib/inmet";
 import { BAIRROS, buscarBairros, sugerirBairro, type Bairro } from "@/lib/bairros";
 import { useAlertaDC, horaAlertaDC } from "@/lib/defesacivil";
@@ -12,6 +12,7 @@ import { loadCommunityReports, submitCommunityReport, reactToCommunityReport, wi
 import type { Ponto } from "@/lib/pontos";
 import { lazyWithRetry } from "@/lib/lazy-retry";
 import { riverReadingAge, riverReadingStale } from "@/lib/river-freshness";
+import { InstallApp } from "@/components/InstallApp";
 import { MapBoundary } from "@/components/MapBoundary";
 
 const RainMap = lazyWithRetry(() => import("@/components/RainMap"));
@@ -72,20 +73,12 @@ function Index() {
   const [raiosError, setRaiosError] = useState(false);
   const [rv, setRv] = useState<RainViewerData | null>(null);
   const [rvError, setRvError] = useState(false);
-  const [installEvent, setInstallEvent] = useState<{ prompt: () => Promise<void> } | null>(null);
-  const [installDismissed, setInstallDismissed] = useState(true);
   const [bairro, setBairro] = useState<Bairro | null>(null);
   const [bairroQuery, setBairroQuery] = useState("");
   const [bairroOpen, setBairroOpen] = useState(false);
   const [gpsNote, setGpsNote] = useState("");
   const [gpsSugestao, setGpsSugestao] = useState<Bairro | null>(null);
   useEffect(() => { setMounted(true); const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
-  useEffect(() => {
-    setInstallDismissed(window.localStorage.getItem("ajf-install-off") === "1");
-    const onBeforeInstall = (e: Event) => { e.preventDefault(); setInstallEvent(e as unknown as { prompt: () => Promise<void> }); };
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-  }, []);
   useEffect(() => { if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {}); }, []);
   useEffect(() => {
     try { const saved = window.localStorage.getItem("ajf-bairro"); if (saved) { const found = BAIRROS.find((b) => b.nome === saved); if (found) setBairro(found); } } catch { /* sem armazenamento */ }
@@ -165,9 +158,6 @@ function Index() {
   const liveReports = reports.filter(r => Date.parse(r.expires_at) > now);
   const SITE = "https://alertajf.vercel.app";
   const waShare = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)}`; const shareTap = (text: string) => (event: { preventDefault: () => void }) => { if (typeof navigator.share === "function") { event.preventDefault(); navigator.share({ text }).catch(() => {}); } };
-  const standalone = mounted && (window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
-  const isIOS = mounted && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const showInstall = mounted && !standalone && !installDismissed && (installEvent !== null || isIOS);
   const rainVerdict = loading ? "Consultando a previsão" : weatherStale ? "Previsão indisponível" : wet ? `Chuva prevista na faixa das ${clock(wet.time)}` : "Sem chuva prevista nas próximas horas";
   const riverStamp = river ? (new Date(river.time).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) === new Date(now).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) ? `às ${clock(river.time)}` : `em ${dateTime(river.time)}`) : "";
   const riverTrend = river && previousRiver ? (river.cm > previousRiver.cm ? "subindo" : river.cm < previousRiver.cm ? "descendo" : "estável") : "com leitura atualizada";
@@ -217,8 +207,9 @@ function Index() {
     <main id="main">
       <div className="eyebrow">PAINEL AMBIENTAL · JUIZ DE FORA / MG</div>
       <section className="intro"><div><h1>Juiz de Fora.<br/><span>De olho no tempo.</span></h1><p>Radar de chuva, Rio Paraibuna e ocorrências da cidade. Dados com origem e horário, sem falsa sensação de segurança.</p></div><div className="independent"><ShieldCheck size={21}/><span>Projeto independente<br/><small>Não substitui os canais oficiais.</small></span></div></section>
+      <InstallApp/>
       <section className="verdict" aria-live="polite"><CloudRain size={20}/><div className="verdict-text"><p><b>Agora em JF:</b> {rainVerdict}{bairro ? ` (previsão do bairro ${bairro.nome})` : ""} · {riverVerdict}{avisos.length > 0 ? ` · Aviso INMET: ${avisos[0].descricao}` : ""}</p>{statusDC === "ok" && (alertaDC ? <p className="dc"><b>Último alerta da Defesa Civil</b> ({horaAlertaDC(alertaDC.emitido)}): {alertaDC.texto} <small>{Date.parse(alertaDC.expira) > Date.now() ? `Em vigor até ${horaAlertaDC(alertaDC.expira)}` : "Encerrado"} · {alertaDC.origem} · via Defesa Civil Alerta</small></p> : <p className="dc"><b>Defesa Civil:</b> nenhum alerta recente para JF. <small>Fonte: Defesa Civil Alerta</small></p>)}</div></section>
-      {showInstall && <section className="install-banner"><Smartphone size={22}/><div><b>Alerta JF na tela inicial do seu celular</b><p>{isIOS ? "No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”." : "Adicione o app para abrir rápido quando a chuva chegar. É gratuito e não passa por loja de aplicativos."}</p></div>{installEvent && <button className="primary" onClick={() => { void installEvent.prompt(); }}>Adicionar</button>}<button className="text-btn" aria-label="Dispensar" onClick={() => { setInstallDismissed(true); try { window.localStorage.setItem("ajf-install-off", "1"); } catch { /* sem armazenamento */ } }}><X size={15}/></button></section>}
+
       <section className="environment-cards" aria-label="Situação ambiental">
         <article className="card env-card"><div className="eyebrow">RIO PARAIBUNA · ANA</div><h3>Nível na estação Marmelos</h3><strong className="big-number">{river && !environmentStale ? `${(river.cm / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m` : "Sem leitura"}</strong><p>{river && !environmentStale ? riverStale ? `Cota da régua · leitura atrasada há ${riverAge} min, sem tendência atual` : `Cota da régua · ${previousRiver ? river.cm > previousRiver.cm ? "subiu" : river.cm < previousRiver.cm ? "desceu" : "sem variação" : "sem comparação"} desde a leitura anterior` : "Não há medição recente validada nesta consulta."}</p><small>{river ? `${dateTime(river.time)} · há ${riverAge} min${riverStale ? " · leitura atrasada" : ""}` : "Aguardando ANA"}</small><details><summary>Sobre esta medição</summary><p>Estação 58480501, PCH Marmelos Montante 1. É cota em uma régua, não a profundidade do rio nem nível de toda a cidade. Sem limite local de transbordamento validado. Dados telemétricos podem atrasar ou conter erros.</p><a href={environment?.river.source || "https://telemetriaws1.ana.gov.br/ServiceANA.asmx"} target="_blank" rel="noreferrer">Ver fonte ANA ↗</a></details><a className="wa-share" href={waShare(riverShare)} onClick={shareTap(riverShare)} target="_blank" rel="noopener noreferrer"><Share2 size={14}/>Compartilhar no WhatsApp</a></article>
         <article className="card env-card"><div className="eyebrow">DESLIZAMENTOS · CEMADEN</div><h3>Alertas de movimentos de massa em JF</h3><strong className="big-number alert-text">{environmentStale || environment?.alerts.status !== "ok" ? "Sem consulta" : movementAlerts.length ? movementAlerts.map(a => a.level).join(" / ") : "Sem aviso listado"}</strong><p>{environmentStale || environment?.alerts.status !== "ok" ? "Fonte oficial indisponível ou desatualizada no momento. Isso não significa ausência de risco." : movementAlerts.length ? movementAlerts.map(a => a.event).join(" · ") : "Nenhum alerta de movimentos de massa emitido para o município de Juiz de Fora nesta consulta. Alertas de cidades vizinhas não entram aqui."}</p><small>{environment ? `Consulta às ${clock(environment.checkedAt)}` : "Consultando fonte oficial…"}</small><details><summary>Entenda o aviso</summary><p>Só entram avisos emitidos para o município de Juiz de Fora (código IBGE 3136702); alertas de cidades vizinhas não aparecem. Alerta municipal, não diagnóstico de uma encosta. Sem aviso não significa ausência de risco. Trincas, movimentação de terra ou água barrenta exigem atenção e contato com a Defesa Civil.</p>{movementAlerts.map(a => <p key={a.id}>Fonte: CEMADEN · atualização: {a.time}</p>)}<a href="https://painelalertas.cemaden.gov.br/" target="_blank" rel="noreferrer">Abrir painel oficial ↗</a></details></article>
@@ -256,13 +247,13 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 @media(max-width:900px){.ajf .environment-cards{grid-template-columns:1fr}.ajf .env-card{padding:18px 20px}.ajf .env-card .big-number{font-size:28px}.ajf .big-number.alert-text{font-size:20px}.ajf .street-grid{grid-template-columns:1fr}.ajf .map-area{height:470px}.ajf .weather{grid-template-columns:1fr}}@media(max-width:480px){.ajf h1{font-size:35px}.ajf .map-area{height:430px}.ajf .environment-cards{gap:10px}.ajf .env-card details{margin-top:8px}.ajf .env-card p{font-size:11px}.ajf .map-heading>b{font-size:10px}.ajf .radar-toggle{font-size:10px}}
 
 .ajf .verdict{display:flex;align-items:center;gap:12px;background:#10293d;border:1px solid #1e4d5c;border-radius:14px;padding:14px 18px;margin:0 0 22px}.ajf .verdict>svg{flex:none;color:#55c6c2}.ajf .verdict p{margin:0;color:#d8f3f0;font-size:15px}.ajf .verdict b{color:#7fe3da}.ajf .verdict-text{display:flex;flex-direction:column;gap:6px;min-width:0}.ajf .verdict .dc{font-size:14px;color:#ffd9a0}.ajf .verdict .dc b{color:#ffb75e}.ajf .verdict .dc small{display:block;color:#9fb8c4;font-size:12px;margin-top:2px}
-.ajf .install-banner{display:flex;align-items:center;gap:14px;background:#142536;border:1px solid #26394a;border-radius:14px;padding:14px 18px;margin:0 0 22px}.ajf .install-banner>svg{flex:none;color:#55c6c2}.ajf .install-banner>div{flex:1}.ajf .install-banner p{margin:2px 0 0;font-size:13px}.ajf .install-banner .primary{white-space:nowrap}
+.ajf .install-access{margin:0 0 20px;border:1px solid #2a485b;border-radius:12px;background:#122333}.ajf .install-access summary{display:flex;align-items:center;gap:10px;padding:13px 16px;color:#83d9d4;font-size:13px;list-style:none}.ajf .install-access summary::after{content:"+";margin-left:auto;font-size:20px}.ajf .install-access details[open] summary::after{content:"−"}.ajf .install-access summary span{font-size:10px;color:#a5c4d1;font-weight:400}.ajf .install-instructions{padding:0 16px 14px;font-size:13px}.ajf .install-instructions p{margin:6px 0 10px}.ajf .install-instructions .primary{margin:0 0 8px}
 .ajf a.wa-share{display:inline-flex;align-items:center;gap:6px;margin-top:10px;border:1px solid #2a5a46;background:#122b22;color:#9fe7c0;border-radius:8px;padding:7px 11px;font-size:12px;text-decoration:none;width:fit-content}
 .ajf a.wa-share:hover{border-color:#3f8a68}
 .ajf a.text-btn.wa-link{text-decoration:none}
 .ajf .community-pill{display:inline-flex;align-items:center;gap:6px;margin-top:10px;border:1px solid #365268;border-radius:999px;padding:5px 12px;font-size:12px;color:#9fc3d8}
 .ajf .quem-faz{margin-top:22px;padding:18px 22px}.ajf .quem-faz p{margin:6px 0 0}
-@media(min-width:801px){.ajf .install-banner{display:none}}
+
 
 @media(max-width:700px){
 .ajf .environment-cards{grid-template-columns:1fr 1fr;grid-auto-flow:dense;gap:8px}
