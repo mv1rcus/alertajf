@@ -49,8 +49,11 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
         p.media.forEach(m => {
           const url = reportMediaUrl(m.path);
           if (m.kind === "video") {
-            const v = document.createElement("video"); v.src = url; v.controls = true; v.playsInline = true; v.preload = "metadata";
-            box.append(v);
+            const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none";
+            const play = document.createElement("button"); play.type = "button"; play.className = "popup-media-play";
+            play.textContent = "\u25b6 Tocar v\u00eddeo";
+            play.addEventListener("click", () => { if (!v.src) { v.src = url; v.preload = "auto"; } void v.play().catch(() => {}); play.remove(); });
+            box.append(play, v);
           } else {
             const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
             const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
