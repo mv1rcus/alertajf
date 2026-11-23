@@ -1,6 +1,7 @@
 // Only the public project URL and publishable key belong here. No service_role key.
 import { projectUrl, publishableKey } from './reports-config';
-export type CommunityReport = { id: string; street: string; neighborhood: string; kind: 'alagamento'|'interdicao'|'deslizamento'|'sem_luz'; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: 'community'; source: 'citizen'; seen_count: number };
+export type ReportMedia = { path: string; kind: 'image'|'video'; credit?: string };
+export type CommunityReport = { id: string; street: string; neighborhood: string; kind: 'alagamento'|'interdicao'|'deslizamento'|'sem_luz'; description: string; lat: number; lng: number; observed_at: string; expires_at: string; status: 'community'; source: 'citizen'; seen_count: number; media?: ReportMedia[] };
 type Session = { access_token: string; refresh_token: string; expires_at: number };
 const storageKey = 'alertajf-community-session-v1';
 let pendingSession: Promise<string> | null = null;
@@ -49,4 +50,23 @@ export async function reactToCommunityReport(reportId: string, reaction: 'seen'|
 
 export async function withdrawCommunityReport(reportId: string) {
  return request("/rest/v1/rpc/ajf_withdraw", {report_id: reportId}, await session());
+}
+
+// Optional photo/video attached to a report, stored in the public relatos-midia bucket.
+const mediaExt: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heic', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
+export const mediaMaxBytes = 25 * 1024 * 1024;
+export function reportMediaUrl(path: string) {
+  return `${projectUrl}/storage/v1/object/public/relatos-midia/${path}`;
+}
+export async function uploadReportMedia(file: File, requestId: string): Promise<ReportMedia> {
+  const ext = mediaExt[file.type];
+  if (!ext) throw new ReportError('Formato não aceito. Envie foto (JPG, PNG, WebP ou HEIC) ou vídeo (MP4, MOV ou WebM).');
+  if (file.size > mediaMaxBytes) throw new ReportError('O arquivo passa de 25 MB. Envie uma foto ou vídeo menor.');
+  const token = await session();
+  const path = `r/${requestId}-1.${ext}`;
+  let r: Response;
+  try { r = await fetch(`${projectUrl}/storage/v1/object/relatos-midia/${path}`, { method: 'POST', headers: { apikey: publishableKey, Authorization: `Bearer ${token}`, 'Content-Type': file.type, 'x-upsert': 'true' }, body: file, signal: AbortSignal.timeout(60000) }); }
+  catch { throw new ReportError('Não foi possível confirmar o envio da foto ou vídeo. Verifique sua conexão e tente de novo.'); }
+  if (!r.ok) throw new ReportError('O envio da foto ou vídeo falhou. Tente de novo ou publique o relato sem anexo.');
+  return { path, kind: file.type.startsWith('video/') ? 'video' : 'image' };
 }

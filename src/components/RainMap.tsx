@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Ponto } from "@/lib/pontos";
 import type { RainViewerData } from "@/lib/rainviewer";
+import { reportMediaUrl } from "@/lib/reports";
 
 const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", sem_luz: "💡", relato: "📍" };
 const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", sem_luz: "#6b5bb5", relato: "#127e86" };
@@ -43,7 +44,23 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
       const name = document.createElement("strong"); name.textContent = p.nome;
       const text = document.createElement("p"); text.textContent = p.descricao;
       popup.append(name, text);
-      L.marker([p.lat, p.lng], { icon }).bindPopup(popup).addTo(group);
+      if (p.media?.length) {
+        const box = document.createElement("div"); box.className = "popup-media";
+        p.media.forEach(m => {
+          const url = reportMediaUrl(m.path);
+          if (m.kind === "video") {
+            const v = document.createElement("video"); v.src = url; v.controls = true; v.playsInline = true; v.preload = "metadata";
+            box.append(v);
+          } else {
+            const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+            const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
+            a.append(img); box.append(a);
+          }
+          if (m.credit) { const c = document.createElement("small"); c.textContent = `Mídia: ${m.credit}`; box.append(c); }
+        });
+        popup.append(box);
+      }
+      L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) }).addTo(group);
     });
     if (selected) L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
   }, [pontos, selected]);
