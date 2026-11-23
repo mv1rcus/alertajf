@@ -6,7 +6,7 @@ Implementado no PR #4, aguardando revisão e aprovação antes de entrar em prod
 
 Relatos são publicados imediatamente como **relato da comunidade, não verificado**. Não há aprovação oficial nem classificação de segurança. “Também vi” mostra um número de apoios de sessões diferentes. O próprio autor não pode apoiar, e cada sessão só pode apoiar uma vez. Apoios não transformam o relato em confirmado.
 
-Os relatos somem da consulta e do mapa 2 horas após a observação. Isso não significa que a rua ficou segura. O autor pode retirar seu relato no mesmo navegador. Três denúncias de sessões diferentes ocultam um relato. Essas regras são simples e podem sofrer abuso; não há atendimento ou revisão humana garantidos.
+Os relatos somem da consulta e do mapa 5 horas após a observação. Isso não significa que a rua ficou segura. O autor pode retirar seu relato no mesmo navegador. Três denúncias de sessões diferentes ocultam um relato. Essas regras são simples e podem sofrer abuso; não há atendimento ou revisão humana garantidos.
 
 ## Implementação e acesso
 
