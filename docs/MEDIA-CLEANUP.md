@@ -1,12 +1,12 @@
 # Exclusão das mídias após 5h
 
 ## Situação deste PR
-Código preparado, **ainda não instalado em produção**. O texto do site corrige a promessa anterior: o pino some após 5h, mas até a ativação da rotina o arquivo pode continuar acessível pelo link direto.
+Instalado em 22/11/2026 após aprovação: função ativa, fila privada, cron a cada minuto e teste real com imagens sintéticas aprovado. A imagem vencida foi removida pela API Storage; a referência futura foi preservada. Nenhuma mídia ativa de morador foi apagada no teste.
 
 ## Proposta para aprovar
 1. Aplicar `MEDIA-CLEANUP.sql`: fila privada, preservação dos caminhos antes da limpeza de linhas antigas e três RPCs exclusivas de service_role. Não altera ajf_submit nem a validade de 5h; não apaga arquivos.
-2. Publicar `supabase/functions/cleanup-report-media` no projeto dedicado. A função usa a chave de serviço já fornecida pelo ambiente da Edge Function. Não aceita destinos/caminhos enviados pelo cliente. Exige POST e Authorization igual à chave de serviço, e sempre usa apenas o bucket relatos-midia.
-3. Guardar o JWT service_role existente no Supabase Vault com nome `ajf_cleanup_service_role` pelo painel seguro. Nunca colocar esse valor no repo, frontend ou chat. Nenhum token novo é necessário.
+2. Publicar `supabase/functions/cleanup-report-media` no projeto dedicado. A função usa a variável privada AJF_CLEANUP_SERVICE_ROLE, configurada com o JWT service_role atual. A variável padrão do ambiente não correspondia à chave atual e o teste inicial recusou a chamada antes de qualquer exclusão. Não aceita destinos/caminhos enviados pelo cliente. Exige POST e Authorization igual à chave de serviço, e sempre usa apenas o bucket relatos-midia.
+3. Guardar o JWT service_role existente no Supabase Vault com nome `ajf_cleanup_service_role` pelo painel seguro. Nunca colocar esse valor no repo, frontend ou chat. O token de implantação fica apenas no cofre, fora do repositório.
 4. Aplicar `MEDIA-CLEANUP-SCHEDULE.sql`: cron a cada minuto por pg_net, invocando a Edge Function. Gratuito dentro das cotas do Supabase Free, sem upgrade. São cerca de 43.200 chamadas/mês. Confirmar as cotas atuais no painel antes de ativar; se indisponível, parar sem contratar plano.
 5. Testar com imagem PNG sintética sem pessoas, num prefixo `r/cleanup-test-<uuid>.png`, vinculada somente a fixture privada com expiração já vencida, nunca no feed público. Confirmar URL acessível antes, executar a rotina, confirmar Storage sem objeto e URL sem arquivo depois. Criar também fixture privada futura para confirmar que o arquivo ativo permanece; remover a fixture/arquivo sintético apenas no escopo do teste aprovado. Verificar grants (anon/authenticated não executam as RPCs). Não executar teste usando mídia real de morador.
 6. Conferir job e execução efetiva. Só depois trocar a mensagem provisória do site por: "O pino e a mídia saem do mapa 5h após o horário observado. Os arquivos são excluídos pela limpeza automática após esse prazo, normalmente em até alguns minutos. Falhas temporárias podem atrasar a exclusão; cópias feitas por terceiros não são controladas pelo site."
@@ -21,7 +21,7 @@ Código preparado, **ainda não instalado em produção**. O texto do site corri
 - A migração protege referências de futuras exclusões de linhas, mas não recupera referências que já tenham sido apagadas antes da instalação.
 
 ## Testes locais
-`node --test supabase/functions/cleanup-report-media/cleanup.test.mjs` cobre filtro de paths, ordem de chamadas, referência ativa, falha de Storage, ausência de ack em falha e falha fechada na seleção. Teste real depende da aprovação da instalação.
+`node --test supabase/functions/cleanup-report-media/cleanup.test.mjs` cobre filtro de paths, ordem de chamadas, referência ativa, falha de Storage, ausência de ack em falha e falha fechada na seleção. Teste real executado: URL vencida 200 antes e 400 após exclusão; URL com referência futura permaneceu 200; chamada sem autorização recebeu 401. Fixtures sintéticas removidas.
 
 ## Fontes
 - https://supabase.com/docs/guides/storage/management/delete-objects
