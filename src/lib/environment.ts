@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { escolherEstacaoChuva, normalizarChuva } from "./chuva";
 
 type RiverPoint = { time: string; cm: number };
 type RainPoint = { time: string; mm: number };
@@ -17,7 +18,7 @@ const CEMADEN = "https://painelalertas.cemaden.gov.br/wsAlertas2";
 const RADAR = "https://data.inpe.br/bdc/stac/v1/search";
 
 /** Estações telemétricas da ANA dentro de Juiz de Fora com pluviômetro e nível.
- *  O site mostra sempre a que tiver a leitura mais recente, com nome e hora. */
+ *  Chuva: referência fixa em Marmelos Montante 1, demais só se não houver leitura válida. */
 const ESTACOES_ANA = [
   { code: "58480501", station: "PCH Marmelos Montante 1", onde: "a ~3 km do centro" },
   { code: "58487000", station: "PCH Marmelos Barramento", onde: "a ~4 km do centro" },
@@ -50,6 +51,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
   };
   const candidatosRio: { ordem: number; station: string; code: string; onde: string; url: string; niveis: RiverPoint[] }[] = [];
+  const candidatosChuva: { ordem: number; station: string; code: string; onde: string; url: string; leituras: RainPoint[] }[] = [];
   await Promise.allSettled([
     // Uma consulta por estação da ANA; de cada uma saem nível (rio) e chuva (mm).
     ...ESTACOES_ANA.map(async (est, ordem) => {
@@ -70,7 +72,9 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       niveis.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
       niveis.splice(0, Math.max(0, niveis.length - 96));
       chuvas.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-      chuvas.splice(0, Math.max(0, chuvas.length - 48));
+      // Deduplica antes do corte para que repetições não expulsem horas válidas.
+      const unicas = normalizarChuva(chuvas, now.getTime());
+      chuvas.splice(0, chuvas.length, ...unicas.slice(-48));
       // Nível do rio: cada estação tem régua com referência própria (escalas não comparáveis),
       // então não dá para trocar de estação pela leitura mais recente. Candidata entra na lista
       // e a escolha acontece depois, sempre preferindo a estação principal (ordem de ESTACOES_ANA).
@@ -82,10 +86,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       if (chuvas.length) {
         const ultima = chuvas[chuvas.length - 1]!;
         data.rain.fontes.push({ station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time });
-        const atual = data.rain.readings.at(-1);
-        if (!atual || Date.parse(ultima.time) > Date.parse(atual.time)) {
-          data.rain.status = "ok"; data.rain.station = est.station; data.rain.code = est.code; data.rain.onde = est.onde; data.rain.source = url; data.rain.readings = chuvas;
-        }
+        candidatosChuva.push({ ordem, ...est, url, leituras: chuvas });
       }
     }),
     // Outros rios de JF: última leitura de nível de cada estação extra.
@@ -134,6 +135,11 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
   const escolhido = candidatosRio.sort((a, b) => a.ordem - b.ordem)[0];
   if (escolhido) {
     data.river.status = "ok"; data.river.station = escolhido.station; data.river.code = escolhido.code; data.river.onde = escolhido.onde; data.river.source = escolhido.url; data.river.readings = escolhido.niveis;
+  }
+  const chuvaEscolhida = escolherEstacaoChuva(candidatosChuva, now.getTime());
+  if (chuvaEscolhida) {
+    data.rain.status = "ok"; data.rain.station = chuvaEscolhida.station; data.rain.code = chuvaEscolhida.code;
+    data.rain.onde = chuvaEscolhida.onde; data.rain.source = chuvaEscolhida.url; data.rain.readings = chuvaEscolhida.leituras;
   }
   data.river.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
   data.rain.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
