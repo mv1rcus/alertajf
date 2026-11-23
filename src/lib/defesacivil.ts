@@ -13,13 +13,17 @@ export type AlertaDC = {
 /** Arquivo atualizado a cada ~10 min pelo workflow "Alertas da Defesa Civil (JF)" (feed IDAP/MIDR). */
 export const URL_DEFESA_CIVIL = "/defesa-civil.json";
 
-export async function buscarAlertaDC(): Promise<AlertaDC | null> {
+export type RespostaDC = { alerta: AlertaDC | null; fonteAtualizada: string | null };
+
+export async function buscarAlertaDC(): Promise<RespostaDC> {
   const r = await fetch(`${URL_DEFESA_CIVIL}?t=${Math.floor(Date.now() / 60000)}`, { signal: AbortSignal.timeout(15000), cache: "no-store" });
   if (!r.ok) throw new Error(`Defesa Civil ${r.status}`);
-  const d = (await r.json()) as { alertas?: AlertaDC[] };
+  const d = (await r.json()) as { alertas?: AlertaDC[]; fonte_atualizada_em?: string };
   if (!Array.isArray(d.alertas)) throw new Error("Resposta inválida");
   const a = d.alertas[0];
-  return a && a.texto && !Number.isNaN(Date.parse(a.emitido)) ? a : null;
+  const alerta = a && a.texto && !Number.isNaN(Date.parse(a.emitido)) ? a : null;
+  const fonteAtualizada = typeof d.fonte_atualizada_em === "string" && !Number.isNaN(Date.parse(d.fonte_atualizada_em)) ? d.fonte_atualizada_em : null;
+  return { alerta, fonteAtualizada };
 }
 
 /** Texto curto para a faixa: "19:49" (hoje) ou "20/11 19:49". */
@@ -32,16 +36,17 @@ export function horaAlertaDC(iso: string, agora = new Date()): string {
 
 export function useAlertaDC() {
   const [alerta, setAlerta] = useState<AlertaDC | null>(null);
+  const [fonteAtualizada, setFonteAtualizada] = useState<string | null>(null);
   const [status, setStatus] = useState<"carregando" | "ok" | "erro">("carregando");
   useEffect(() => {
     let vivo = true;
     const go = () =>
       buscarAlertaDC()
-        .then((a) => { if (vivo) { setAlerta(a); setStatus("ok"); } })
+        .then((r) => { if (vivo) { setAlerta(r.alerta); setFonteAtualizada(r.fonteAtualizada); setStatus("ok"); } })
         .catch(() => { if (vivo) setStatus("erro"); });
     go();
     const t = setInterval(go, 5 * 60 * 1000);
     return () => { vivo = false; clearInterval(t); };
   }, []);
-  return { alerta, status };
+  return { alerta, status, fonteAtualizada };
 }
