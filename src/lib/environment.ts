@@ -7,6 +7,7 @@ export type EnvironmentData = {
   checkedAt: string;
   river: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RiverPoint[]; fontes: FonteLeitura[] };
   rain: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RainPoint[]; fontes: FonteLeitura[] };
+  outrosRios: { rio: string; station: string; code: string; onde: string; leituraEm: string; cm: number | null; tendencia: "subindo" | "descendo" | "estavel" }[];
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
 };
@@ -21,6 +22,12 @@ const ESTACOES_ANA = [
   { code: "58480501", station: "PCH Marmelos Montante 1", onde: "a ~3 km do centro" },
   { code: "58487000", station: "PCH Marmelos Barramento", onde: "a ~4 km do centro" },
   { code: "58489000", station: "PCH Joasal Barramento", onde: "a ~7 km do centro, na saída sul" },
+];
+
+/** Outros rios dentro de JF com telemetria ANA ativa (além do Paraibuna). */
+const RIOS_EXTRAS = [
+  { code: "58512040", station: "UHE Picada Montante 1", rio: "Rio do Peixe", onde: "zona oeste de JF" },
+  { code: "58520200", station: "CGH Monte Verde Jusante", rio: "Rio Monte Verde", onde: "zona sul, área rural de JF" },
 ];
 
 const get = (url: string) => fetch(url, { signal: AbortSignal.timeout(12000), headers: { Accept: "application/json,application/xml,text/xml" } }).then(r => { if (!r.ok) throw Error("Fonte indisponível"); return r; });
@@ -38,12 +45,14 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     checkedAt: now.toISOString(),
     river: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
     rain: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
+    outrosRios: [],
     alerts: { status: "error", source: "https://painelalertas.cemaden.gov.br/", updated: "", items: [] },
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
   };
+  const candidatosRio: { ordem: number; station: string; code: string; onde: string; url: string; niveis: RiverPoint[] }[] = [];
   await Promise.allSettled([
     // Uma consulta por estação da ANA; de cada uma saem nível (rio) e chuva (mm).
-    ...ESTACOES_ANA.map(async (est) => {
+    ...ESTACOES_ANA.map(async (est, ordem) => {
       const url = anaUrl(est.code, start, now);
       const xml = await (await get(url)).text();
       const niveis: RiverPoint[] = [];
@@ -62,14 +71,13 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       niveis.splice(0, Math.max(0, niveis.length - 96));
       chuvas.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
       chuvas.splice(0, Math.max(0, chuvas.length - 48));
-      // Esta estação vira candidata se a leitura dela for a mais recente até agora.
+      // Nível do rio: cada estação tem régua com referência própria (escalas não comparáveis),
+      // então não dá para trocar de estação pela leitura mais recente. Candidata entra na lista
+      // e a escolha acontece depois, sempre preferindo a estação principal (ordem de ESTACOES_ANA).
       if (niveis.length) {
         const ultima = niveis[niveis.length - 1]!;
         data.river.fontes.push({ station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time });
-        const atual = data.river.readings.at(-1);
-        if (!atual || Date.parse(ultima.time) > Date.parse(atual.time)) {
-          data.river.status = "ok"; data.river.station = est.station; data.river.code = est.code; data.river.onde = est.onde; data.river.source = url; data.river.readings = niveis;
-        }
+        candidatosRio.push({ ordem, station: est.station, code: est.code, onde: est.onde, url, niveis });
       }
       if (chuvas.length) {
         const ultima = chuvas[chuvas.length - 1]!;
@@ -78,6 +86,27 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
         if (!atual || Date.parse(ultima.time) > Date.parse(atual.time)) {
           data.rain.status = "ok"; data.rain.station = est.station; data.rain.code = est.code; data.rain.onde = est.onde; data.rain.source = url; data.rain.readings = chuvas;
         }
+      }
+    }),
+    // Outros rios de JF: última leitura de nível de cada estação extra.
+    ...RIOS_EXTRAS.map(async (est) => {
+      try {
+        const xml = await (await get(anaUrl(est.code, start, now))).text();
+      const niveis: RiverPoint[] = [];
+      for (const match of xml.matchAll(/<DadosHidrometereologicos(?:\s[^>]*)?>([\s\S]*?)<\/DadosHidrometereologicos>/g)) {
+        const row = match[1] || "";
+        if (tag(row, "CodEstacao") !== est.code) continue;
+        const time = tag(row, "DataHora").replace(" ", "T") + "-03:00";
+        const timeOk = Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000;
+        const raw = tag(row, "Nivel"); const cm = Number(raw);
+        if (timeOk && raw && Number.isFinite(cm) && cm > -10000 && cm < 100000) niveis.push({ time, cm });
+      }
+      niveis.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      const ultima = niveis.at(-1); const anterior = niveis.at(-2);
+        if (!ultima) throw Error("Sem leitura");
+        data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time, cm: ultima.cm, tendencia: !anterior ? "estavel" : ultima.cm > anterior.cm ? "subindo" : ultima.cm < anterior.cm ? "descendo" : "estavel" });
+      } catch {
+        data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: "", cm: null, tendencia: "estavel" });
       }
     }),
     (async () => {
@@ -100,6 +129,12 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       data.radar.status = "ok"; data.radar.frames = frames;
     })(),
   ]);
+  // Estação principal (mais próxima do centro, régua de referência do site) tem prioridade;
+  // as demais só entram se ela estiver sem leitura, e o nome da estação aparece no card.
+  const escolhido = candidatosRio.sort((a, b) => a.ordem - b.ordem)[0];
+  if (escolhido) {
+    data.river.status = "ok"; data.river.station = escolhido.station; data.river.code = escolhido.code; data.river.onde = escolhido.onde; data.river.source = escolhido.url; data.river.readings = escolhido.niveis;
+  }
   data.river.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
   data.rain.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
   cache = { at: Date.now(), data };
