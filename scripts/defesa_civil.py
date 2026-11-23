@@ -4,7 +4,7 @@
 Uso: python scripts/defesa_civil.py [arquivo_xml_local]
 Saída: public/defesa-civil.json (só é reescrito se o conteúdo mudar).
 """
-import json, os, subprocess, sys, tempfile
+import json, os, re, subprocess, sys, tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
@@ -76,6 +76,16 @@ def ler(caminho):
     return achados
 
 
+def cabecalho_feed(caminho):
+    """Lê o <updated> do cabeçalho Atom do feed (quando a fonte foi atualizada pela última vez)."""
+    try:
+        with open(caminho, encoding="utf-8", errors="replace") as f:
+            m = re.search(r"<updated>([^<]+)</updated>", f.read(4096))
+        return m.group(1).strip() if m else None
+    except OSError:
+        return None
+
+
 def baixar():
     tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False).name
     subprocess.run(["curl", "-sS", "--fail", "--compressed", "-m", "280", "-A", "alertajf/1.0 (+https://alertajf.vercel.app)", "-o", tmp, FEED], check=True)
@@ -85,10 +95,14 @@ def baixar():
 def main():
     caminho = sys.argv[1] if len(sys.argv) > 1 else baixar()
     novos = ler(caminho)
+    feed_atualizado = cabecalho_feed(caminho)
     antigos = []
+    fonte_atualizada_antiga = None
     if os.path.exists(SAIDA):
         try:
-            antigos = json.load(open(SAIDA, encoding="utf-8")).get("alertas", [])
+            dados = json.load(open(SAIDA, encoding="utf-8"))
+            antigos = dados.get("alertas", [])
+            fonte_atualizada_antiga = dados.get("fonte_atualizada_em")
         except Exception:
             antigos = []
     por_id = {a["id"]: a for a in antigos}
@@ -96,7 +110,7 @@ def main():
     corte = (datetime.now(timezone.utc) - timedelta(days=GUARDAR_DIAS)).isoformat()
     lista = [a for a in por_id.values() if datetime.fromisoformat(a["emitido"]).astimezone(timezone.utc).isoformat() >= corte]
     lista.sort(key=lambda a: datetime.fromisoformat(a["emitido"]), reverse=True)
-    saida = {"fonte": "Defesa Civil Alerta (IDAP/MIDR)", "alertas": lista[:MAX_ALERTAS]}
+    saida = {"fonte": "Defesa Civil Alerta (IDAP/MIDR)", "fonte_atualizada_em": feed_atualizado or fonte_atualizada_antiga, "alertas": lista[:MAX_ALERTAS]}
     novo = json.dumps(saida, ensure_ascii=False, indent=2) + "\n"
     if os.path.exists(SAIDA) and open(SAIDA, encoding="utf-8").read() == novo:
         print("sem mudanças")
