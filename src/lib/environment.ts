@@ -2,10 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 
 type RiverPoint = { time: string; cm: number };
 type RainPoint = { time: string; mm: number };
+export type FonteLeitura = { station: string; code: string; onde: string; leituraEm: string };
 export type EnvironmentData = {
   checkedAt: string;
-  river: { status: "ok" | "error"; station: string; code: string; source: string; readings: RiverPoint[] };
-  rain: { status: "ok" | "error"; station: string; code: string; source: string; readings: RainPoint[] };
+  river: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RiverPoint[]; fontes: FonteLeitura[] };
+  rain: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RainPoint[]; fontes: FonteLeitura[] };
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
 };
@@ -13,45 +14,72 @@ let cache: { at: number; data: EnvironmentData } | undefined;
 const ANA = "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos";
 const CEMADEN = "https://painelalertas.cemaden.gov.br/wsAlertas2";
 const RADAR = "https://data.inpe.br/bdc/stac/v1/search";
+
+/** Estações telemétricas da ANA dentro de Juiz de Fora com pluviômetro e nível.
+ *  O site mostra sempre a que tiver a leitura mais recente, com nome e hora. */
+const ESTACOES_ANA = [
+  { code: "58480501", station: "PCH Marmelos Montante 1", onde: "a ~3 km do centro" },
+  { code: "58487000", station: "PCH Marmelos Barramento", onde: "a ~4 km do centro" },
+  { code: "58489000", station: "PCH Joasal Barramento", onde: "a ~7 km do centro, na saída sul" },
+];
+
 const get = (url: string) => fetch(url, { signal: AbortSignal.timeout(12000), headers: { Accept: "application/json,application/xml,text/xml" } }).then(r => { if (!r.ok) throw Error("Fonte indisponível"); return r; });
 const dayBr = (date: Date) => date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}>([^<]+)</${name}>`))?.[1]?.trim() || "";
+const anaUrl = (code: string, start: Date, now: Date) => `${ANA}?${new URLSearchParams({ codEstacao: code, dataInicio: dayBr(start), dataFim: dayBr(now) })}`;
+
 export const getEnvironment = createServerFn({ method: "GET" }).handler(async (): Promise<EnvironmentData> => {
   if (cache && Date.now() - cache.at < 10 * 60000) return cache.data;
   const now = new Date();
   const start = new Date(now.getTime() - 7 * 24 * 3600000);
-  const anaUrl = `${ANA}?${new URLSearchParams({ codEstacao: "58480501", dataInicio: dayBr(start), dataFim: dayBr(now) })}`;
   const radarUrl = `${RADAR}?${new URLSearchParams({ collections: "br-weather-radar-cappi-1", bbox: "-43.7,-22,-43,-21.4", datetime: `${new Date(now.getTime() - 3 * 3600000).toISOString()}/${now.toISOString()}`, limit: "100" })}`;
+  const vazia = ESTACOES_ANA[0]!;
   const data: EnvironmentData = {
     checkedAt: now.toISOString(),
-    river: { status: "error", station: "PCH Marmelos Montante 1", code: "58480501", source: anaUrl, readings: [] },
-    rain: { status: "error", station: "PCH Marmelos Montante 1", code: "58480501", source: anaUrl, readings: [] },
+    river: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
+    rain: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
     alerts: { status: "error", source: "https://painelalertas.cemaden.gov.br/", updated: "", items: [] },
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
   };
   await Promise.allSettled([
-    (async () => {
-      const xml = await (await get(anaUrl)).text();
-      const readings: RiverPoint[] = [];
-      const rainReadings: RainPoint[] = [];
+    // Uma consulta por estação da ANA; de cada uma saem nível (rio) e chuva (mm).
+    ...ESTACOES_ANA.map(async (est) => {
+      const url = anaUrl(est.code, start, now);
+      const xml = await (await get(url)).text();
+      const niveis: RiverPoint[] = [];
+      const chuvas: RainPoint[] = [];
       for (const match of xml.matchAll(/<DadosHidrometereologicos(?:\s[^>]*)?>([\s\S]*?)<\/DadosHidrometereologicos>/g)) {
         const row = match[1] || "";
-        if (tag(row, "CodEstacao") !== "58480501") continue;
+        if (tag(row, "CodEstacao") !== est.code) continue;
         const time = tag(row, "DataHora").replace(" ", "T") + "-03:00";
         const timeOk = Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000;
         const raw = tag(row, "Nivel"); const cm = Number(raw);
-        if (timeOk && raw && Number.isFinite(cm) && cm > -10000 && cm < 100000) readings.push({ time, cm });
+        if (timeOk && raw && Number.isFinite(cm) && cm > -10000 && cm < 100000) niveis.push({ time, cm });
         const rawRain = tag(row, "Chuva"); const mm = Number(rawRain);
-        if (timeOk && rawRain && Number.isFinite(mm) && mm >= 0 && mm < 1000) rainReadings.push({ time, mm });
+        if (timeOk && rawRain && Number.isFinite(mm) && mm >= 0 && mm < 1000) chuvas.push({ time, mm });
       }
-      readings.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-      readings.splice(0, Math.max(0, readings.length - 96));
-      rainReadings.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
-      rainReadings.splice(0, Math.max(0, rainReadings.length - 48));
-      if (!readings.length) throw Error("Sem leitura");
-      data.river.status = "ok"; data.river.readings = readings;
-      if (rainReadings.length) { data.rain.status = "ok"; data.rain.readings = rainReadings; }
-    })(),
+      niveis.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      niveis.splice(0, Math.max(0, niveis.length - 96));
+      chuvas.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      chuvas.splice(0, Math.max(0, chuvas.length - 48));
+      // Esta estação vira candidata se a leitura dela for a mais recente até agora.
+      if (niveis.length) {
+        const ultima = niveis[niveis.length - 1]!;
+        data.river.fontes.push({ station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time });
+        const atual = data.river.readings.at(-1);
+        if (!atual || Date.parse(ultima.time) > Date.parse(atual.time)) {
+          data.river.status = "ok"; data.river.station = est.station; data.river.code = est.code; data.river.onde = est.onde; data.river.source = url; data.river.readings = niveis;
+        }
+      }
+      if (chuvas.length) {
+        const ultima = chuvas[chuvas.length - 1]!;
+        data.rain.fontes.push({ station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time });
+        const atual = data.rain.readings.at(-1);
+        if (!atual || Date.parse(ultima.time) > Date.parse(atual.time)) {
+          data.rain.status = "ok"; data.rain.station = est.station; data.rain.code = est.code; data.rain.onde = est.onde; data.rain.source = url; data.rain.readings = chuvas;
+        }
+      }
+    }),
     (async () => {
       const json = await (await get(CEMADEN)).json();
       if (!Array.isArray(json.alertas)) throw Error("Formato não reconhecido");
@@ -72,6 +100,8 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       data.radar.status = "ok"; data.radar.frames = frames;
     })(),
   ]);
+  data.river.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
+  data.rain.fontes.sort((a, b) => Date.parse(b.leituraEm) - Date.parse(a.leituraEm));
   cache = { at: Date.now(), data };
   return data;
 });
