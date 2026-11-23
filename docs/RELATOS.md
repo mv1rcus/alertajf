@@ -50,7 +50,7 @@ Supabase Free pode pausar por inatividade e tem cotas. Não há garantia de disp
 
 - Cada relato pode ter até 2 anexos (foto ou vídeo), opcionais, públicos como o texto e o ponto, sem revisão prévia. Herdam o rótulo "não verificado", a denúncia (3 sessões ocultam o relato e a mídia some do mapa) e a expiração.
 - Bucket público `relatos-midia` no mesmo projeto Supabase: 25 MB por arquivo, apenas imagem (JPG/PNG/WebP/HEIC) ou vídeo (MP4/MOV/WebM). Upload exige a sessão anônima do site e só na pasta `r/`; sem sobrescrever nem apagar.
-- O envio (`ajf_submit`) só aceita anexo cujo nome começa com o `request_id` do próprio relato; mídia com mais de 7 dias é apagada junto com a limpeza dos relatos.
+- O envio (`ajf_submit`) só aceita anexo cujo nome começa com o `request_id` do próprio relato; a saída do mapa não exclui o arquivo do bucket. A limpeza automática descrita em MEDIA-CLEANUP.md precisa ser instalada e testada separadamente.
 - O popup do pino mostra a foto (toque abre em tela cheia) ou o vídeo com play; crédito da fonte aparece quando informado.
 - Instalação: `docs/RELATOS-MIDIA.sql` (idempotente). Supabase Free: 1 GB de armazenamento e 2 GB de banda/mês; vídeos grandes consomem banda a cada reprodução — monitorar se o uso crescer.
 - Fotos e vídeos podem conter metadados do aparelho (EXIF). O formulário avisa que o anexo fica público e pede para não enviar pessoas nem dados pessoais.
