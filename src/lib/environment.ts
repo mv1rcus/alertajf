@@ -131,8 +131,9 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     })(),
   ]);
   // Estação principal (mais próxima do centro, régua de referência do site) tem prioridade;
-  // as demais só entram se ela estiver sem leitura, e o nome da estação aparece no card.
-  const escolhido = candidatosRio.sort((a, b) => a.ordem - b.ordem)[0];
+  // Nunca substituir a régua principal: barramentos podem ter outro datum de cota.
+  // Sem resposta da referência, o rio permanece explicitamente sem leitura.
+  const escolhido = candidatosRio.find(c => c.code === "58480501");
   if (escolhido) {
     data.river.status = "ok"; data.river.station = escolhido.station; data.river.code = escolhido.code; data.river.onde = escolhido.onde; data.river.source = escolhido.url; data.river.readings = escolhido.niveis;
   }
