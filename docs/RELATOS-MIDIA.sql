@@ -42,7 +42,7 @@ begin
  s:=btrim(payload->>'street'); n:=btrim(payload->>'neighborhood'); d:=btrim(payload->>'description'); k:=payload->>'kind';
  if s is null or n is null or d is null or k is null or (s||n||d) ~ '[<>]' then raise exception 'Texto inválido'; end if;
  t:=(payload->>'observed_at')::timestamptz; la:=(payload->>'lat')::float8; lo:=(payload->>'lng')::float8;
- if t is null or t>now() or t<=now()-interval '2 hours' or la is null or lo is null then raise exception 'Observação deve ser das últimas 2 horas, sem horário futuro'; end if;
+ if t is null or t>now() or t<=now()-interval '5 hours' or la is null or lo is null then raise exception 'Observação deve ser das últimas 5 horas, sem horário futuro'; end if;
  m:=coalesce(payload->'media','[]'::jsonb);
  if jsonb_typeof(m)<>'array' or jsonb_array_length(m)>2
  or exists(select 1 from jsonb_array_elements(m) e
@@ -54,13 +54,12 @@ begin
  select id into rid from ajf_private.reports where author=u and request_id=(payload->>'request_id')::uuid;
  if found then return rid; end if;
  delete from ajf_private.reports where received_at<now()-interval '7 days';
- delete from storage.objects where bucket_id='relatos-midia' and created_at<now()-interval '7 days';
  if (select count(*) from ajf_private.reports where author=u and received_at>now()-interval '1 hour')>=30
  or exists(select 1 from ajf_private.reports where author=u and received_at>now()-interval '1 minute') then raise exception 'Limite de envios: aguarde antes de tentar novamente'; end if;
  if (select count(*) from ajf_private.reports where received_at>now()-interval '1 hour')>=300 then raise exception 'Limite temporário do serviço. Tente mais tarde'; end if;
  if exists(select 1 from ajf_private.reports where author=u and not withdrawn and expires_at>now() and lower(street)=lower(s) and lower(neighborhood)=lower(n) and kind=k) then raise exception 'Você já enviou um relato recente para esse local'; end if;
  insert into ajf_private.reports(author,request_id,street,neighborhood,kind,description,lat,lng,observed_at,expires_at,media)
- values(u,(payload->>'request_id')::uuid,s,n,k,d,la,lo,t,t+interval '2 hours',m) returning id into rid;
+ values(u,(payload->>'request_id')::uuid,s,n,k,d,la,lo,t,t+interval '5 hours',m) returning id into rid;
  return rid;
 end;
 $$;
