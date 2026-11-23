@@ -14,7 +14,7 @@ begin
  insert into ajf_private.media_cleanup(path,expires_at)
  select e->>'path',old.expires_at from jsonb_array_elements(old.media) e
  where e->>'path' ~ '^r/[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$' and e->>'path' not like '%..%'
- on conflict(path) do update set expires_at=greatest(media_cleanup.expires_at,excluded.expires_at);
+ on conflict on constraint media_cleanup_pkey do update set expires_at=greatest(media_cleanup.expires_at,excluded.expires_at);
  return old;
 end $$;
 revoke all on function ajf_private.queue_report_media() from public,anon,authenticated;
@@ -36,7 +36,7 @@ begin
  select e->>'path',max(r.expires_at) from ajf_private.reports r, jsonb_array_elements(r.media) e
  where r.expires_at<=now() and e->>'path' ~ '^r/[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$'
  and e->>'path' not like '%..%' group by e->>'path'
- on conflict(path) do update set expires_at=greatest(media_cleanup.expires_at,excluded.expires_at);
+ on conflict on constraint media_cleanup_pkey do update set expires_at=greatest(media_cleanup.expires_at,excluded.expires_at);
  return query select q.path from ajf_private.media_cleanup q
  where public.ajf_media_cleanup_eligible(q.path) order by q.expires_at limit 100;
 end $$;
