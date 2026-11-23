@@ -7,7 +7,7 @@ export type EnvironmentData = {
   checkedAt: string;
   river: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RiverPoint[]; fontes: FonteLeitura[] };
   rain: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RainPoint[]; fontes: FonteLeitura[] };
-  outrosRios: { rio: string; station: string; code: string; onde: string; leituraEm: string; cm: number; tendencia: "subindo" | "descendo" | "estavel" }[];
+  outrosRios: { rio: string; station: string; code: string; onde: string; leituraEm: string; cm: number | null; tendencia: "subindo" | "descendo" | "estavel" }[];
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
 };
@@ -90,7 +90,8 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     }),
     // Outros rios de JF: última leitura de nível de cada estação extra.
     ...RIOS_EXTRAS.map(async (est) => {
-      const xml = await (await get(anaUrl(est.code, start, now))).text();
+      try {
+        const xml = await (await get(anaUrl(est.code, start, now))).text();
       const niveis: RiverPoint[] = [];
       for (const match of xml.matchAll(/<DadosHidrometereologicos(?:\s[^>]*)?>([\s\S]*?)<\/DadosHidrometereologicos>/g)) {
         const row = match[1] || "";
@@ -102,8 +103,11 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       }
       niveis.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
       const ultima = niveis.at(-1); const anterior = niveis.at(-2);
-      if (!ultima) throw Error("Sem leitura");
-      data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time, cm: ultima.cm, tendencia: !anterior ? "estavel" : ultima.cm > anterior.cm ? "subindo" : ultima.cm < anterior.cm ? "descendo" : "estavel" });
+        if (!ultima) throw Error("Sem leitura");
+        data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time, cm: ultima.cm, tendencia: !anterior ? "estavel" : ultima.cm > anterior.cm ? "subindo" : ultima.cm < anterior.cm ? "descendo" : "estavel" });
+      } catch {
+        data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: "", cm: null, tendencia: "estavel" });
+      }
     }),
     (async () => {
       const json = await (await get(CEMADEN)).json();
