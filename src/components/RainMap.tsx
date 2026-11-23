@@ -60,7 +60,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
         });
         popup.append(box);
       }
-      L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: 250 }).addTo(group);
+      L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) }).addTo(group);
     });
     if (selected) L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
   }, [pontos, selected]);
