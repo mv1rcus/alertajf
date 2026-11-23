@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { cleanup } from './cleanup.mjs';
 
 Deno.serve(async (request: Request) => {
-  const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const secret = Deno.env.get('AJF_CLEANUP_SERVICE_ROLE');
   if (!secret || request.headers.get('Authorization') !== `Bearer ${secret}`) {
     return new Response('Unauthorized', {status: 401});
   }
