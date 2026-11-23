@@ -1,7 +1,16 @@
 {
   "fonte": "Defesa Civil Alerta (IDAP/MIDR)",
-  "fonte_atualizada_em": "2026-11-23T20:38:41Z",
+  "fonte_atualizada_em": "2026-11-23T20:48:50Z",
   "alertas": [
+    {
+      "id": "200212/2026",
+      "evento": "CHUVAS INTENSAS",
+      "texto": "Alerta de Tempestade com rajadas de vento e chuva moderada a forte. Proteja-se!",
+      "emitido": "2026-11-23T17:46:35-03:00",
+      "expira": "2026-11-23T21:00:00-03:00",
+      "severidade": "Severe",
+      "origem": "Defesa Civil Estadual de Minas Gerais"
+    },
     {
       "id": "200049/2026",
       "evento": "CHUVAS INTENSAS",
@@ -37,15 +46,6 @@
       "expira": "2026-11-22T22:01:00-03:00",
       "severidade": "Extreme",
       "origem": "Defesa Civil Estadual de Minas Gerais"
-    },
-    {
-      "id": "manual-sms-2026-11-22-2002",
-      "evento": "CHUVAS INTENSAS",
-      "texto": "Alerta severo de chuvas intensas para Juiz de Fora. Risco de inundações, alagamentos e deslizamentos. Proteja-se!",
-      "emitido": "2026-11-22T20:02:00-03:00",
-      "expira": "2026-11-23T12:00:00-03:00",
-      "severidade": "Severe",
-      "origem": "Defesa Civil de Juiz de Fora (MG)"
     }
   ]
 }
