@@ -7,6 +7,7 @@ export type EnvironmentData = {
   checkedAt: string;
   river: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RiverPoint[]; fontes: FonteLeitura[] };
   rain: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RainPoint[]; fontes: FonteLeitura[] };
+  outrosRios: { rio: string; station: string; code: string; onde: string; leituraEm: string; cm: number; tendencia: "subindo" | "descendo" | "estavel" }[];
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
 };
@@ -21,6 +22,12 @@ const ESTACOES_ANA = [
   { code: "58480501", station: "PCH Marmelos Montante 1", onde: "a ~3 km do centro" },
   { code: "58487000", station: "PCH Marmelos Barramento", onde: "a ~4 km do centro" },
   { code: "58489000", station: "PCH Joasal Barramento", onde: "a ~7 km do centro, na saída sul" },
+];
+
+/** Outros rios dentro de JF com telemetria ANA ativa (além do Paraibuna). */
+const RIOS_EXTRAS = [
+  { code: "58512040", station: "UHE Picada Montante 1", rio: "Rio do Peixe", onde: "zona oeste de JF" },
+  { code: "58520200", station: "CGH Monte Verde Jusante", rio: "Rio Monte Verde", onde: "zona sul, área rural de JF" },
 ];
 
 const get = (url: string) => fetch(url, { signal: AbortSignal.timeout(12000), headers: { Accept: "application/json,application/xml,text/xml" } }).then(r => { if (!r.ok) throw Error("Fonte indisponível"); return r; });
@@ -38,6 +45,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     checkedAt: now.toISOString(),
     river: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
     rain: { status: "error", station: vazia.station, code: vazia.code, onde: vazia.onde, source: anaUrl(vazia.code, start, now), readings: [], fontes: [] },
+    outrosRios: [],
     alerts: { status: "error", source: "https://painelalertas.cemaden.gov.br/", updated: "", items: [] },
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
   };
@@ -79,6 +87,23 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
           data.rain.status = "ok"; data.rain.station = est.station; data.rain.code = est.code; data.rain.onde = est.onde; data.rain.source = url; data.rain.readings = chuvas;
         }
       }
+    }),
+    // Outros rios de JF: última leitura de nível de cada estação extra.
+    ...RIOS_EXTRAS.map(async (est) => {
+      const xml = await (await get(anaUrl(est.code, start, now))).text();
+      const niveis: RiverPoint[] = [];
+      for (const match of xml.matchAll(/<DadosHidrometereologicos(?:\s[^>]*)?>([\s\S]*?)<\/DadosHidrometereologicos>/g)) {
+        const row = match[1] || "";
+        if (tag(row, "CodEstacao") !== est.code) continue;
+        const time = tag(row, "DataHora").replace(" ", "T") + "-03:00";
+        const timeOk = Number.isFinite(Date.parse(time)) && Date.parse(time) <= Date.now() + 60000;
+        const raw = tag(row, "Nivel"); const cm = Number(raw);
+        if (timeOk && raw && Number.isFinite(cm) && cm > -10000 && cm < 100000) niveis.push({ time, cm });
+      }
+      niveis.sort((a, b) => Date.parse(a.time) - Date.parse(b.time));
+      const ultima = niveis.at(-1); const anterior = niveis.at(-2);
+      if (!ultima) throw Error("Sem leitura");
+      data.outrosRios.push({ rio: est.rio, station: est.station, code: est.code, onde: est.onde, leituraEm: ultima.time, cm: ultima.cm, tendencia: !anterior ? "estavel" : ultima.cm > anterior.cm ? "subindo" : ultima.cm < anterior.cm ? "descendo" : "estavel" });
     }),
     (async () => {
       const json = await (await get(CEMADEN)).json();
