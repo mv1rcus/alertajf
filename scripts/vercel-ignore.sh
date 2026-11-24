@@ -19,3 +19,5 @@ fi
 # Mudança só de batimento (timestamp): pula o deploy.
 exit 0
 
+
+# Retry manual de deploy: sem mudanca funcional (fila do rate limit Hobby).
