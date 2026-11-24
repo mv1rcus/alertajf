@@ -40,11 +40,23 @@ def codec_ok(arq):
     return s.get("video") == "h264" and s.get("audio", "aac") == "aac"
 
 
+def garantir_ffmpeg():
+    """A imagem nova do runner (ubuntu 26) veio sem ffmpeg: instala na hora se faltar."""
+    import shutil
+    if shutil.which("ffmpeg") and shutil.which("ffprobe"):
+        return
+    sh(["sudo", "apt-get", "update", "-qq"])
+    r = sh(["sudo", "apt-get", "install", "-y", "-qq", "ffmpeg"])
+    print("ffmpeg instalado" if r.returncode == 0 else "ffmpeg não instalou: " + r.stderr[-200:])
+
+
 def main():
     itens = c.fila_listar("analisado", 10)
     if not itens:
         c.log_robo("robo3_baixar", True, "nada na fila para baixar")
         return 0
+    if any(i["origem"] == "instagram" and i["eh_video"] for i in itens):
+        garantir_ffmpeg()
     ok_n = 0
     for it in itens:
         try:
