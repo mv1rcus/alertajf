@@ -54,16 +54,12 @@
   "instagram_backend": "servicos",
   "servicos": {
     "perfis": [
-      "tribunademinas",
       "transitojuizdefora",
       "jfdepressao",
       "noticiasjf1",
-      "acessa.com_",
-      "jfnoticias.com.br",
-      "folhajf",
       "luismar.tv"
     ],
-    "perfis_por_varredura": 5,
+    "perfis_por_varredura": 4,
     "intervalo_min": 20,
     "teto": {
       "scrappa": {
@@ -97,6 +93,15 @@
       "intervalo_min": 30,
       "teto_dia": 60,
       "teto_mes": 800
+    },
+    "perfis_fora": {
+      "motivo": "24/11: tribunademinas, jfnoticias.com.br e folhajf já vêm pelo RSS (sem cota); acessa.com_ 0 aprovados em 5 posts. Poupa a cota do Scrappa depois de 01/12. Pode voltar a qualquer momento.",
+      "perfis": [
+        "tribunademinas",
+        "jfnoticias.com.br",
+        "folhajf",
+        "acessa.com_"
+      ]
     }
   }
 }
