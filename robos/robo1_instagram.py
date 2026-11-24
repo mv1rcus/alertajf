@@ -492,7 +492,7 @@ def _post_json(url, headers, body=None, timeout=150):
     import urllib.request
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None,
                                  method="POST" if body is not None else "GET",
-                                 headers=dict(headers, **({"Content-Type": "application/json"} if body is not None else {})))
+                                 headers=dict({"User-Agent": c.UA, "Accept": "application/json"}, **headers, **({"Content-Type": "application/json"} if body is not None else {})))  # o UA padrão do urllib é bloqueado pelo Cloudflare do maviapi (erro 1010)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
