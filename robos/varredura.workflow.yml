@@ -1,0 +1,93 @@
+name: Varredura (4 robôs)
+# Acorda quando chove ou vai chover em JF (portão) e volta a dormir quando a chuva acaba.
+# O gatilho confiável é o cron-job.org chamando workflow_dispatch a cada 15 min; o cron abaixo é o reserva (o GitHub atrasa).
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      forcar:
+        description: "Forçar varredura mesmo sem chuva (teste)"
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: varredura
+  cancel-in-progress: false
+env:
+  SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  FORCAR_VARREDURA: ${{ inputs.forcar && '1' || '0' }}
+defaults:
+  run:
+    working-directory: robos
+jobs:
+  portao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      chove: ${{ steps.p.outputs.chove }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: python3 portao.py
+
+  robo1-instagram:
+    needs: portao
+    if: needs.portao.outputs.chove == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      IG_USERNAME: ${{ secrets.IG_USERNAME }}
+      IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .ig-sessao
+          key: ig-sessao-${{ github.run_id }}
+          restore-keys: ig-sessao-
+      - run: pip install --quiet instaloader
+      - run: python3 robo1_instagram.py
+      - name: Abrir issue se o login do Instagram caiu
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: .
+        run: |
+          if [ -f .ig-falhou ]; then
+            if [ -z "$(gh issue list --state open --label robo-instagram --json number -q '.[0].number')" ]; then
+              gh label create robo-instagram --color D93F0B 2>/dev/null || true
+              gh issue create --label robo-instagram --title "Robô do Instagram: login caiu, precisa de ação" --body "O robô não conseguiu entrar na conta do Instagram. Veja docs/ROBOS.md (seção 'Instagram caiu') para o passo a passo. O Google Notícias continua alimentando o site. Erro: $(cat .ig-falhou)"
+            fi
+          fi
+
+  robo2-noticias:
+    needs: portao
+    if: needs.portao.outputs.chove == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 robo2_noticias.py
+
+  robo3-baixar:
+    needs: [portao, robo1-instagram, robo2-noticias]
+    if: always() && needs.portao.outputs.chove == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet yt-dlp
+      - run: python3 robo3_baixar.py
+
+  robo4-publicar:
+    needs: [portao, robo3-baixar]
+    if: always() && needs.portao.outputs.chove == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 robo4_publicar.py
