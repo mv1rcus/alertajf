@@ -25,9 +25,9 @@ O radar RainViewer que o site usa só mostra o que já passou (sem previsão), e
 
 - Só **ocorrência real da chuva ATUAL em Juiz de Fora**: alagamento, enxurrada, deslizamento/queda de barranco, via interditada, queda de energia por chuva.
 - Só com **local identificado** (rua ou bairro de JF no texto). Sem local, descarta.
-- **Só da chuva de hoje**: a IA extrai o horário do fato; só publica se estiver dentro das últimas 5 h (a mesma janela de expiração do site). Post antigo de temporal passado é descartado mesmo que o perfil tenha postado agora.
+- **Só da chuva de hoje**: a IA extrai o horário do fato; só publica se estiver dentro das últimas 2 h (a mesma janela de expiração do site). Post antigo de temporal passado é descartado mesmo que o perfil tenha postado agora.
 - **Descarta** foto/vídeo genérico de céu ou chuva caindo, imagem de alerta (Defesa Civil, previsão, gráfico) e notícia de outra cidade.
-- Todo relato leva **crédito da fonte** e o aviso **"Não verificado."**; expira em 5 h como os demais.
+- Todo relato leva **crédito da fonte** e o aviso **"Não verificado."**; expira em 2 h como os demais.
 
 ## Custo zero (e o que pode virar custo)
 
