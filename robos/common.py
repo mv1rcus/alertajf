@@ -63,9 +63,9 @@ def ja_na_fila(item):
         return False
 
 
-def fila_listar(estado, limite=20):
+def fila_listar(estado, limite=20, ordem="asc"):
     q = urllib.parse.quote(estado)
-    return _sb("GET", f"ajf_fila?estado=eq.{q}&order=criado_em.asc&limit={limite}") or []
+    return _sb("GET", f"ajf_fila?estado=eq.{q}&order=criado_em.{ordem}&limit={limite}") or []
 
 
 def fila_atualizar(id_, **campos):

@@ -1,5 +1,5 @@
 """ROBÔ 3: baixa o vídeo/foto dos itens aprovados e converte tudo para H.264/AAC mp4 (toca em iPhone, Android e desktop)."""
-import json, os, subprocess, sys, tempfile
+import datetime as dt, json, os, subprocess, sys, tempfile
 import common as c
 
 TETO = 7 * 1024 * 1024  # mesmo teto de vídeo do formulário do site
@@ -51,7 +51,20 @@ def garantir_ffmpeg():
 
 
 def main():
-    itens = c.fila_listar("analisado", 10)
+    todos = c.fila_listar("analisado", 40, "desc")  # mais novos primeiro: na tempestade o fato recente vale mais que o antigo
+    itens = []
+    for it in todos:
+        try:
+            t = dt.datetime.fromisoformat(it["analise"]["ocorrido_em"].replace("Z", "+00:00"))
+            if t.tzinfo is None:
+                t = t.replace(tzinfo=dt.timezone.utc)
+            if t < c.agora() - dt.timedelta(hours=c.JANELA_HORAS):
+                c.fila_atualizar(it["id"], estado="descartado", motivo="fora da janela de 2h (descartado antes de baixar)")
+                continue
+        except Exception:
+            pass
+        itens.append(it)
+    itens = itens[:10]
     if not itens:
         c.log_robo("robo3_baixar", True, "nada na fila para baixar")
         return 0

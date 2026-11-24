@@ -47,7 +47,7 @@ def retirar_do_ar():
 
 def main():
     retirar_do_ar()
-    itens = c.fila_listar("baixado", 10)
+    itens = c.fila_listar("baixado", 10, "desc")
     if not itens:
         c.log_robo("robo4_publicar", True, "nada na fila para publicar")
         return 0
