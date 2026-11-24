@@ -25,13 +25,22 @@ def conferir_video(path):
         return s.get("video") == "h264" and s.get("audio", "aac") == "aac"
 
 
+def publicados_agora():
+    d = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_reports", {"apikey": c.PUBLISHABLE_KEY}, {})
+    return d if isinstance(d, list) else []
+
+
 def main():
     itens = c.fila_listar("baixado", 10)
     if not itens:
         c.log_robo("robo4_publicar", True, "nada na fila para publicar")
         return 0
+    if any(i.get("midia_path") and not i["midia_path"].endswith(".jpg") for i in itens):
+        import robo3_baixar
+        robo3_baixar.garantir_ffmpeg()
     token = sessao_anonima()
-    pub = 0
+    no_ar = publicados_agora()
+    pub = falhas = desc = 0
     for it in itens:
         try:
             a = it["analise"]
@@ -39,32 +48,47 @@ def main():
             if not ok:
                 print("descartado:", it["post_id"], motivo)
                 c.fila_atualizar(it["id"], estado="descartado", motivo=motivo)
+                desc += 1
                 continue
             geo = c.geocodificar(a.get("rua", ""), a.get("bairro", ""))
             if not geo:
                 print("descartado:", it["post_id"], "local não encontrado em JF", a.get("rua"), a.get("bairro"))
                 c.fila_atualizar(it["id"], estado="descartado", motivo="local não encontrado em JF")
+                desc += 1
                 continue
             lat, lon, bairro = geo
+            tipo = a["tipo"] if a["tipo"] != "enxurrada" else "alagamento"
+            rua = a.get("rua") or bairro
+            if any((r.get("street") or "").lower() == rua.lower() and (r.get("neighborhood") or "").lower() == bairro.lower() and r.get("kind") == tipo for r in no_ar):
+                print("descartado:", it["post_id"], "já há pin igual no ar")
+                c.fila_atualizar(it["id"], estado="descartado", motivo="já há pin igual no ar")
+                desc += 1
+                continue
             midia = []
             if it.get("midia_path"):
                 midia = [{"path": it["midia_path"], "kind": "image" if it["midia_path"].endswith(".jpg") else "video", "credit": f'{it["autor"]} (Instagram)'[:120]}]
-            payload = {"street": a.get("rua") or bairro, "neighborhood": bairro, "kind": a["tipo"] if a["tipo"] != "enxurrada" else "alagamento",
+                if midia[0]["kind"] == "video" and not conferir_video(it["midia_path"]):  # confere a mídia ANTES de publicar
+                    raise RuntimeError("vídeo não é H.264/AAC ou não abre; não publicado")
+            payload = {"street": rua, "neighborhood": bairro, "kind": tipo,
                        "description": descricao(it, a), "lat": lat, "lng": lon, "observed_at": a["ocorrido_em"], "request_id": str(it["request_id"]), "media": midia}
-            c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit", {"apikey": c.PUBLISHABLE_KEY, "Authorization": f"Bearer {token}"}, {"payload": payload})
-            if midia and midia[0]["kind"] == "video" and not conferir_video(it["midia_path"]):
-                raise RuntimeError("publicado, mas o vídeo servido não é H.264/AAC")
-            c.fila_atualizar(it["id"], estado="publicado", motivo=None)
+            rid = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit", {"apikey": c.PUBLISHABLE_KEY, "Authorization": f"Bearer {token}"}, {"payload": payload})
+            c.fila_atualizar(it["id"], estado="publicado", motivo=f"id={rid}")  # marca na hora: nunca republica o mesmo item
+            if not any(r.get("id") == rid for r in publicados_agora()):
+                raise RuntimeError(f"enviado (id={rid}) mas não apareceu na lista pública")
+            print("publicado:", it["post_id"], "id", rid)
             pub += 1
         except Exception as e:
             msg = str(e)
             if "Você já enviou" in msg or "Limite" in msg:  # duplicado/limite do site: não insistir
                 c.fila_atualizar(it["id"], estado="descartado", motivo=msg[:200])
+                desc += 1
             else:
-                print("falhou:", it["post_id"], e)
-                c.fila_erro(it, e)
-    c.log_robo("robo4_publicar", True, f"{pub}/{len(itens)} publicados")
-    return 0
+                falhas += 1
+                print("FALHOU:", it["post_id"], e)
+                if it.get("estado") == "baixado":
+                    c.fila_erro(it, e)
+    c.log_robo("robo4_publicar", falhas == 0, f"{len(itens)} na fila: {pub} publicados, {falhas} falharam, {desc} descartados")
+    return 1 if falhas else 0
 
 
 if __name__ == "__main__":
