@@ -491,6 +491,25 @@ def _post_json(url, headers, body=None, timeout=150):
         return json.loads(r.read().decode())
 
 
+def _quando(v):
+    """Data do post em qualquer formato dos provedores: ISO, epoch em segundos ou em milissegundos (número ou texto)."""
+    if isinstance(v, (int, float)) or (isinstance(v, str) and v.strip().replace(".", "", 1).isdigit()):
+        x = float(v)
+        if x > 1e11:  # milissegundos
+            x /= 1000
+        return dt.datetime.fromtimestamp(x, dt.timezone.utc)
+    d = dt.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    return d if d.tzinfo else d.replace(tzinfo=dt.timezone.utc)
+
+
+def _link_post(codigo, nome):
+    """Link do post: shortcode do Instagram (letras, números, _ e -). Id numérico não abre em /p/, então cai pro perfil."""
+    cod = str(codigo or "")
+    if cod and not cod.isdigit():
+        return f"https://www.instagram.com/p/{cod}/"
+    return f"https://www.instagram.com/{nome}/"
+
+
 def _ler_scrappa(nome, chave):
     d = _post_json("https://scrappa.co/api/instagram/user/posts?username=" + urllib.parse.quote(nome), {"X-API-KEY": chave}, None, 60)
     out = []
@@ -610,7 +629,7 @@ def _main_posts(cfg):
     uso["ultimo"] = time.time()  # grava antes: mesmo se falhar, não repete antes do intervalo
     _salvar_uso(uso)
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
-    novos = analisados = lidos = lidos_perfis = falhas = 0
+    novos = analisados = lidos = lidos_perfis = falhas = brutos = parseados = 0
     for nome in escolha:
         try:
             posts = leitor(nome, os.environ[env])
@@ -629,15 +648,17 @@ def _main_posts(cfg):
         u["usado"] += custo
         u["dia_usado"] += custo
         lidos_perfis += 1
+        brutos += len(posts[:12])
         for n in posts[:12]:
             try:
-                data = dt.datetime.fromisoformat(str(n["quando"]).replace("Z", "+00:00"))
-                if data.tzinfo is None:
-                    data = data.replace(tzinfo=dt.timezone.utc)
+                data = _quando(n["quando"])
+                parseados += 1
                 if data < limite:
                     continue
-                it = dict(origem="instagram", post_id=n["shortcode"], autor=f"@{nome}",
-                          url=f"https://www.instagram.com/p/{n['shortcode']}/", legenda=n["legenda"],
+                if not n.get("shortcode"):
+                    continue
+                it = dict(origem="instagram", post_id=str(n["shortcode"]), autor=f"@{nome}",
+                          url=_link_post(n["shortcode"], nome), legenda=n["legenda"],
                           publicado_em=data.isoformat(), midia_url=n.get("midia"), eh_video=n["video"])
                 lidos += 1
                 if not it["legenda"].strip() and not it["eh_video"]:
@@ -654,6 +675,10 @@ def _main_posts(cfg):
                 print("candidato falhou:", n.get("shortcode"), e)
     _salvar_uso(uso)
     cfgt = sv["teto"][melhor]
+    if brutos and parseados == 0:  # formato do provedor mudou: avisa em vez de parecer "sem posts novos"
+        c.log_robo("robo1_instagram", False, "Instagram (%s): %d posts lidos, 0 parseados (formato de data/id mudou?)" % (melhor, brutos))
+    elif brutos:
+        print("%s: %d posts lidos, %d parseados" % (melhor, brutos, parseados))
     msg = "%s: %d/%d perfis lidos, %d posts recentes, %d novos, %d aprovados pela IA (uso do mês %d/%d)" % (melhor, lidos_perfis, len(escolha), lidos, novos, analisados, u["usado"], cfgt["mes"])
     if escolha and lidos_perfis == 0:
         c.log_robo("robo1_instagram", False, "Instagram (" + msg + ")")
