@@ -18,6 +18,10 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const markers = useRef<L.LayerGroup | null>(null);
+  const markerLayers = useRef(new Map<string, L.Marker>());
+  const markerSigs = useRef(new Map<string, string>());
+  const selectedLayer = useRef<L.CircleMarker | null>(null);
+  const openPonto = useRef<string | null>(null);
   const layers = useRef<L.GridLayer[]>([]);
   const radar = radarFrames?.length ? radarFrames : null;
   const [radarError, setRadarError] = useState(false);
@@ -35,11 +39,11 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
     const resize = new ResizeObserver(() => m.invalidateSize()); resize.observe(el.current);
     return () => { resize.disconnect(); m.remove(); map.current = null; };
   }, []);
+  // Mantém os marcadores entre atualizações dos dados: só recria o pino quando
+  // o conteúdo do ponto muda, para não derrubar um popup aberto (ex.: vídeo tocando).
   useEffect(() => {
     const group = markers.current; if (!group) return;
-    group.clearLayers();
-    pontos.forEach(p => {
-      const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${colors[p.tipo]}">${icons[p.tipo]}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+    const buildPopup = (p: Ponto) => {
       const popup = document.createElement("div");
       const name = document.createElement("strong"); name.textContent = p.nome;
       const text = document.createElement("p"); text.textContent = p.descricao;
@@ -63,9 +67,29 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
         });
         popup.append(box);
       }
-      L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) }).addTo(group);
+      return popup;
+    };
+    const seen = new Set<string>();
+    pontos.forEach(p => {
+      seen.add(p.id);
+      const sig = JSON.stringify(p);
+      if (markerSigs.current.get(p.id) === sig) return;
+      const old = markerLayers.current.get(p.id);
+      if (old) group.removeLayer(old);
+      const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${colors[p.tipo]}">${icons[p.tipo]}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+      const marker = L.marker([p.lat, p.lng], { icon }).bindPopup(buildPopup(p), { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) });
+      marker.on("popupopen", () => { openPonto.current = p.id; });
+      marker.on("popupclose", () => { if (openPonto.current === p.id) openPonto.current = null; });
+      marker.addTo(group);
+      markerLayers.current.set(p.id, marker);
+      markerSigs.current.set(p.id, sig);
+      if (openPonto.current === p.id) marker.openPopup();
     });
-    if (selected) L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
+    markerLayers.current.forEach((layer, id) => {
+      if (!seen.has(id)) { group.removeLayer(layer); markerLayers.current.delete(id); markerSigs.current.delete(id); }
+    });
+    if (selectedLayer.current) { group.removeLayer(selectedLayer.current); selectedLayer.current = null; }
+    if (selected) selectedLayer.current = L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
   }, [pontos, selected]);
   useEffect(() => {
     const m = map.current; if (!m || !onPick) return;
