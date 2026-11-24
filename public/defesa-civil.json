@@ -1,7 +1,16 @@
 {
   "fonte": "Defesa Civil Alerta (IDAP/MIDR)",
-  "fonte_atualizada_em": "2026-11-24T13:10:10Z",
+  "fonte_atualizada_em": "2026-11-24T13:15:13Z",
   "alertas": [
+    {
+      "id": "200338/2026",
+      "evento": "DESLIZAMENTOS",
+      "texto": "Risco Moderado de ocorrência de Deslizamentos.",
+      "emitido": "2026-11-24T10:09:39-03:00",
+      "expira": "2026-11-25T10:00:00-03:00",
+      "severidade": "Moderate",
+      "origem": "Defesa Civil Nacional"
+    },
     {
       "id": "200261/2026",
       "evento": "DESLIZAMENTOS",
@@ -36,15 +45,6 @@
       "emitido": "2026-11-22T20:31:54-03:00",
       "expira": "2026-11-23T20:29:00-03:00",
       "severidade": "Moderate",
-      "origem": "Defesa Civil Estadual de Minas Gerais"
-    },
-    {
-      "id": "199962/2026",
-      "evento": "CHUVAS INTENSAS",
-      "texto": "Alerta de tempestade severa com chuva intensa  com duração de 02:00h. Proteja-se!",
-      "emitido": "2026-11-22T20:08:28-03:00",
-      "expira": "2026-11-22T22:06:00-03:00",
-      "severidade": "Severe",
       "origem": "Defesa Civil Estadual de Minas Gerais"
     }
   ]
