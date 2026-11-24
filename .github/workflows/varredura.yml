@@ -26,6 +26,7 @@ env:
   SOCIALTAP_KEY: ${{ secrets.SOCIALTAP_KEY }}
   MAVIAPI_KEY: ${{ secrets.MAVIAPI_KEY }}
   CREATORCRAWL_KEY: ${{ secrets.CREATORCRAWL_KEY }}
+  HERASCRAPE_KEY: ${{ secrets.HERASCRAPE_KEY }}
 defaults:
   run:
     working-directory: robos
