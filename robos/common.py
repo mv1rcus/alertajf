@@ -106,22 +106,23 @@ REGRAS (todas obrigatórias, na dúvida valido=false):
 5. Timezone do texto: Brasília (UTC-3)."""
 
 
+_RUINS = set()
+
+
 def _modelo():
+    """Escolhe o modelo Gemini disponível pra esta chave (pula os que deram 404 / saíram do plano grátis)."""
     global _MODELO
-    if "_MODELO" in globals():
+    if "_MODELO" in globals() and _MODELO not in _RUINS:
         return _MODELO
-    pref = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-flash-latest"]
+    pref = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
     try:
         d = http("GET", f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}&pageSize=200")
         nomes = [m["name"].split("/")[-1] for m in d.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
-        for p in pref:
-            if p in nomes:
-                _MODELO = p
-                return p
-        flash = [n for n in nomes if "flash" in n and "image" not in n and "tts" not in n]
-        _MODELO = sorted(flash)[0] if flash else pref[0]
+        cand = [p for p in pref if p in nomes and p not in _RUINS]
+        cand += [n for n in sorted(nomes, reverse=True) if "flash" in n and not any(x in n for x in ("image", "tts", "live", "audio", "preview", "exp")) and n not in cand and n not in _RUINS]
+        _MODELO = cand[0] if cand else next(p for p in pref if p not in _RUINS)
     except Exception:
-        _MODELO = pref[0]
+        _MODELO = next((p for p in pref if p not in _RUINS), pref[0])
     return _MODELO
 
 
@@ -133,12 +134,16 @@ def analisar(item):
                                    publicado=item.get("publicado_em") or "desconhecido", legenda=(item.get("legenda") or "")[:3000])
     corpo = {"contents": [{"parts": [{"text": prompt}]}],
              "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
-    for tentativa in range(4):
+    for tentativa in range(8):
         try:
             d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_modelo()}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
             txt = d["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(txt)
         except RuntimeError as e:
+            if "HTTP 404" in str(e) and _modelo() not in _RUINS:
+                _RUINS.add(_modelo())
+                print(f"modelo {_modelo()} indisponível; tentando outro")
+                continue
             if "HTTP 429" in str(e) or "HTTP 503" in str(e):
                 time.sleep(15 * (tentativa + 1))
                 continue

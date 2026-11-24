@@ -32,3 +32,7 @@ create table if not exists public.ajf_robos_log (
 );
 alter table public.ajf_robos_log enable row level security;
 revoke all on public.ajf_robos_log from anon, authenticated;
+
+-- Tabelas criadas via SQL ficam sem privilégio pro service_role neste projeto; liberar explicitamente.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.ajf_fila, public.ajf_robos_log to service_role;
