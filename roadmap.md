@@ -1,1 +1,2 @@
 - [ ] Mapa mais leve (sem travadas)
+
