@@ -27,6 +27,7 @@ env:
   MAVIAPI_KEY: ${{ secrets.MAVIAPI_KEY }}
   CREATORCRAWL_KEY: ${{ secrets.CREATORCRAWL_KEY }}
   HERASCRAPE_KEY: ${{ secrets.HERASCRAPE_KEY }}
+  BRIGHTDATA_KEY: ${{ secrets.BRIGHTDATA_KEY }}
 defaults:
   run:
     working-directory: robos
