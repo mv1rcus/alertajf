@@ -62,6 +62,8 @@ def main():
             it = dict(origem="noticias", post_id=re.sub(r"\W+", "", n["link"])[-60:], autor=n["fonte"] or "Google Notícias",
                       url=n["link"], legenda=f'{n["titulo"]}\n{n["resumo"]}'.strip(), publicado_em=pub.isoformat(), eh_video=False)
             try:
+                if c.ja_na_fila(it):
+                    continue
                 a = c.analisar(it)
                 ok, motivo = c.validar_analise(a)
                 it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
