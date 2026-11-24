@@ -13,6 +13,7 @@ GEOCODE_JF = "3136702"
 JF = (-21.7642, -43.3503)  # lat, lon
 SAIDA = os.path.join(os.path.dirname(__file__), "..", "public", "defesa-civil.json")
 CAP = "{urn:oasis:names:tc:emergency:cap:1.2}"
+CANCELADOS = set()  # ids de alertas cancelados no feed
 MAX_ALERTAS = 5
 GUARDAR_DIAS = 7
 
@@ -57,7 +58,15 @@ def ler(caminho):
     for _, el in ET.iterparse(caminho, events=("end",)):
         if el.tag != CAP + "alert":
             continue
-        if t(el, "status") != "Actual" or t(el, "msgType") == "Cancel":
+        if t(el, "status") != "Actual":
+            el.clear()
+            continue
+        if t(el, "msgType") == "Cancel":
+            # "Cancel" derruba o alerta original: <references> = "remetente,identificador,enviado"
+            for ref in t(el, "references").split():
+                partes = ref.split(",")
+                if len(partes) >= 2:
+                    CANCELADOS.add(partes[1])
             el.clear()
             continue
         for info in el.findall(CAP + "info"):
@@ -107,6 +116,15 @@ def main():
             antigos = []
     por_id = {a["id"]: a for a in antigos}
     por_id.update({a["id"]: a for a in novos})
+    for cid in CANCELADOS:
+        por_id.pop(cid, None)  # alerta cancelado sai do arquivo
+    agora_utc = datetime.now(timezone.utc)
+    for aid, a in list(por_id.items()):  # vencido não fica como atual
+        try:
+            if a.get("expira") and datetime.fromisoformat(a["expira"]).astimezone(timezone.utc) < agora_utc:
+                por_id.pop(aid)
+        except ValueError:
+            pass
     corte = (datetime.now(timezone.utc) - timedelta(days=GUARDAR_DIAS)).isoformat()
     lista = [a for a in por_id.values() if datetime.fromisoformat(a["emitido"]).astimezone(timezone.utc).isoformat() >= corte]
     lista.sort(key=lambda a: datetime.fromisoformat(a["emitido"]), reverse=True)

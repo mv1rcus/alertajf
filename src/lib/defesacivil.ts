@@ -24,7 +24,9 @@ export async function buscarAlertaDC(): Promise<RespostaDC> {
   if (!r.ok) throw new Error(`Defesa Civil ${r.status}`);
   const d = (await r.json()) as { alertas?: AlertaDC[]; fonte_atualizada_em?: string };
   if (!Array.isArray(d.alertas)) throw new Error("Resposta inválida");
-  const a = d.alertas[0];
+  // alerta vencido nunca aparece como atual: pega o primeiro que ainda não expirou
+  const vigente = (x: AlertaDC) => !x.expira || Number.isNaN(Date.parse(x.expira)) || Date.parse(x.expira) > Date.now();
+  const a = d.alertas.find(vigente);
   const alerta = a && a.texto && !Number.isNaN(Date.parse(a.emitido)) ? a : null;
   const fonteAtualizada = typeof d.fonte_atualizada_em === "string" && !Number.isNaN(Date.parse(d.fonte_atualizada_em)) ? d.fonte_atualizada_em : null;
   return { alerta, fonteAtualizada };
