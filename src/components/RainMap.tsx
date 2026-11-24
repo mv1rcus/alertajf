@@ -45,7 +45,7 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
     const group = markers.current; if (!group) return;
     const buildPopup = (p: Ponto) => {
       const popup = document.createElement("div");
-      // Cliques dentro do popup (botão "Tocar vídeo", controles do player) chegam até
+      // Cliques dentro do popup (controles do player de vídeo) chegam até
       // o contêiner do mapa: o Leaflet os trata como clique no mapa e fecha o popup,
       // cortando o vídeo. Bloqueamos a propagação na raiz do conteúdo do popup.
       L.DomEvent.disableClickPropagation(popup);
@@ -59,11 +59,11 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
         p.media.forEach(m => {
           const url = reportMediaUrl(m.path);
           if (m.kind === "video") {
-            const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none";
-            const play = document.createElement("button"); play.type = "button"; play.className = "popup-media-play";
-            play.textContent = "\u25b6 Tocar v\u00eddeo";
-            play.addEventListener("click", () => { if (!v.src) { v.src = url; v.preload = "auto"; } void v.play().catch(() => {}); play.remove(); });
-            box.append(play, v);
+            // O src precisa estar no elemento desde já: sem ele o play nativo dos
+            // controles fica carregando para sempre. Com preload="none" o navegador
+            // não baixa nada até a pessoa tocar no play do próprio player.
+            const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none"; v.src = url;
+            box.append(v);
           } else {
             const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
             const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
