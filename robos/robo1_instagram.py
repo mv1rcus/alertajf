@@ -632,8 +632,9 @@ def _ler_brightdata(nome, chave):
     for n in itens if isinstance(itens, list) else []:
         if not isinstance(n, dict) or n.get("error"):
             continue
-        vids = n.get("videos") if isinstance(n.get("videos"), list) else n.get("videos_duration")
-        vurl = (vids[0] or {}).get("url") if isinstance(vids, list) and vids else None
+        vids = n.get("videos") or n.get("videos_duration") or []
+        v0 = vids[0] if isinstance(vids, list) and vids else None
+        vurl = v0.get("url") if isinstance(v0, dict) else v0
         video = bool(vurl) or n.get("content_type") in ("Reel", "Video")
         imgs = n.get("images") if isinstance(n.get("images"), list) else []
         foto = (imgs[0] or {}).get("url") if imgs else None
