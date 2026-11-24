@@ -599,11 +599,56 @@ def _ler_herascrape(nome, chave):
     return out
 
 
+class _Cobrado(Exception):
+    """O Bright Data aceitou o pedido (já conta na cota) mas a leitura não terminou: o uso é contado mesmo assim."""
+
+
+def _ler_brightdata(nome, chave):
+    """Bright Data (Web Scraper API, Instagram Posts): assíncrono (pedir, esperar, buscar). Cobra por registro (post):
+    pedimos no máx. 12 posts por perfil e o teto mensal fica em fontes.json (trava de 5.000 registros/mês, grátis)."""
+    h = {"Authorization": "Bearer " + chave}
+    base = "https://api.brightdata.com/datasets/v3/"
+    d = _post_json(base + "trigger?dataset_id=gd_lk5ns7kz21pck8jpis&type=discover_new&discover_by=url&limit_per_input=12&include_errors=true",
+                   h, [{"url": "https://www.instagram.com/%s/" % nome, "num_of_posts": 12}], 60)
+    snap = d.get("snapshot_id")
+    if not snap:
+        return []
+    try:
+        pronto = False
+        for _ in range(16):  # até ~2,5 min
+            time.sleep(10)
+            st = _post_json(base + "progress/" + snap, h, None, 30).get("status")
+            if st == "ready":
+                pronto = True
+                break
+            if st in ("failed", "canceled"):
+                break
+        if not pronto:
+            raise RuntimeError("snapshot nao ficou pronto")
+        itens = _post_json(base + "snapshot/%s?format=json" % snap, h, None, 90)
+    except Exception as e:
+        raise _Cobrado(str(e)[:80])
+    out = []
+    for n in itens if isinstance(itens, list) else []:
+        if not isinstance(n, dict) or n.get("error"):
+            continue
+        vids = n.get("videos") if isinstance(n.get("videos"), list) else n.get("videos_duration")
+        vurl = (vids[0] or {}).get("url") if isinstance(vids, list) and vids else None
+        video = bool(vurl) or n.get("content_type") in ("Reel", "Video")
+        imgs = n.get("images") if isinstance(n.get("images"), list) else []
+        foto = (imgs[0] or {}).get("url") if imgs else None
+        foto = foto or n.get("thumbnail") or ((n.get("photos") or [None])[0])
+        out.append(dict(shortcode=n.get("shortcode"), legenda=n.get("description") or "", quando=n.get("date_posted") or "",
+                        video=video, midia=vurl if video else foto))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
             "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1),
             "creatorcrawl": ("CREATORCRAWL_KEY", _ler_creatorcrawl, 1),
-            "herascrape": ("HERASCRAPE_KEY", _ler_herascrape, 1)}
+            "herascrape": ("HERASCRAPE_KEY", _ler_herascrape, 1),
+            "brightdata": ("BRIGHTDATA_KEY", _ler_brightdata, 12)}
 
 
 def _main_posts(cfg):
@@ -676,6 +721,9 @@ def _main_posts(cfg):
             continue
         except Exception as e:
             falhas += 1
+            if isinstance(e, _Cobrado):
+                u["usado"] += custo
+                u["dia_usado"] += custo
             print(f"{melhor} {nome}: {type(e).__name__}: {str(e)[:100]}")
             continue
         u["usado"] += custo
