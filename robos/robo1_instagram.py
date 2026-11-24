@@ -263,6 +263,209 @@ def candidatos_app(cl, perfis):
             print(f"perfil {nome}: {type(e).__name__}: {str(e)[:120]}")
 
 
+# ---- Backend "browser": Chromium de verdade (Playwright) com sessão persistida. Imita o login que funciona no navegador. ----
+WEB_ESTADO = os.path.join(APP_DIR, "web_state.json")
+WEB_BLOQUEIO = os.path.join(APP_DIR, "bloqueio_web")  # "epoch|tag"
+IG_APP_ID = "936619743392459"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+
+def _playwright():
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "playwright"], check=True)
+        from playwright.sync_api import sync_playwright
+    return sync_playwright
+
+
+def _instalar_chromium():
+    import subprocess
+    subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _logado(page):
+    try:
+        return any(ck["name"] == "ds_user_id" for ck in page.context.cookies("https://www.instagram.com"))
+    except Exception:
+        return False
+
+
+def _checa_bloqueio(arq, tag):
+    if os.path.exists(arq):
+        try:
+            ate, _, tag_b = open(arq).read().strip().partition("|")
+            if float(ate) > time.time() and tag_b == tag:
+                raise FalhaApp("em espera por falha anterior (%d min restantes)" % ((float(ate) - time.time()) // 60 + 1))
+        except ValueError:
+            pass
+
+
+def _login_navegador(page, user, senha, seed):
+    import re
+    page.goto("https://www.instagram.com/accounts/login/?hl=en", wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2500)
+    for txt in ("Allow all cookies", "Allow essential and optional cookies", "Decline optional cookies"):
+        b = page.get_by_role("button", name=txt)
+        if b.count():
+            b.first.click()
+            page.wait_for_timeout(800)
+            break
+    campo_u = page.locator('input[name="username"]')
+    if not campo_u.count():
+        campo_u = page.get_by_role("textbox", name=re.compile("username|email", re.I))
+    campo_s = page.locator('input[name="password"]')
+    if not campo_s.count():
+        campo_s = page.get_by_role("textbox", name=re.compile("password", re.I))
+    campo_u.first.fill(user)
+    page.wait_for_timeout(random.randint(500, 1200))
+    campo_s.first.fill(senha)
+    page.wait_for_timeout(random.randint(500, 1200))
+    page.get_by_role("button", name=re.compile(r"^log in$", re.I)).first.click()
+    page.wait_for_timeout(7000)
+    if "two_step" in page.url or "two_factor" in page.url or page.get_by_text(re.compile("authentication app", re.I)).count():
+        if not seed:
+            raise FalhaApp("pediu 2FA e falta IG_TOTP_SECRET")
+        cod = page.locator('input[name="verificationCode"]')
+        if not cod.count():
+            cod = page.get_by_role("textbox", name=re.compile("code", re.I))
+        cod.first.fill(totp(seed))
+        page.wait_for_timeout(600)
+        page.get_by_role("button", name=re.compile("^(continue|confirm)$", re.I)).first.click()
+        page.wait_for_timeout(8000)
+    corpo = ""
+    try:
+        corpo = page.inner_text("body")[:600].lower()
+    except Exception:
+        pass
+    if not _logado(page):
+        if "challenge" in page.url or "suspicious" in corpo or "notification" in corpo or "another device" in corpo:
+            raise FalhaApp("Instagram pediu aprovação de dispositivo/desafio (%s)" % page.url.split("?")[0][-60:])
+        raise FalhaApp("login pelo navegador não completou (%s)" % page.url.split("?")[0][-60:])
+
+
+def _perfil_web(page, nome):
+    r = page.evaluate("""async (a) => {
+        const r = await fetch('/api/v1/users/web_profile_info/?username=' + a.nome,
+            {headers: {'x-ig-app-id': a.app, 'x-requested-with': 'XMLHttpRequest'}, credentials: 'include'});
+        const t = await r.text();
+        return {status: r.status, body: t.slice(0, 400000)};
+    }""", {"nome": nome, "app": IG_APP_ID})
+    if r["status"] in (401, 403) or "login_required" in r["body"][:300]:
+        raise PermissionError("sessão sem permissão de leitura (HTTP %s)" % r["status"])
+    if r["status"] != 200:
+        raise RuntimeError("HTTP %s" % r["status"])
+    return json.loads(r["body"])["data"]["user"]
+
+
+def itens_de_perfil(u, nome, limite):
+    midia = (u.get("edge_owner_to_timeline_media") or {}).get("edges", [])
+    for e in midia[:12]:
+        n = e["node"]
+        data = dt.datetime.fromtimestamp(n["taken_at_timestamp"], dt.timezone.utc)
+        if data < limite:
+            continue
+        leg = ((n.get("edge_media_to_caption") or {}).get("edges") or [{}])[0].get("node", {}).get("text", "")
+        video = bool(n.get("is_video"))
+        yield dict(origem="instagram", post_id=n["shortcode"], autor=f"@{nome}",
+                   url=f"https://www.instagram.com/p/{n['shortcode']}/", legenda=leg or "",
+                   publicado_em=data.isoformat(), midia_url=n.get("video_url") if video else None, eh_video=video)
+
+
+def main_browser(cfg, perfis):
+    tag = cfg.get("instagram_liberar", "")
+    os.makedirs(APP_DIR, exist_ok=True)
+    user, senha, seed = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD"), os.environ.get("IG_TOTP_SECRET")
+
+    def falha(msg, horas=24):
+        open(WEB_BLOQUEIO, "w").write("%s|%s" % (time.time() + horas * 3600, tag))
+        c.log_robo("robo1_instagram", False, f"Instagram (navegador): {msg}")
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(msg[:300])
+        return 0
+
+    try:
+        _checa_bloqueio(WEB_BLOQUEIO, tag)
+        if not user or not senha:
+            raise FalhaApp("faltam IG_USERNAME/IG_PASSWORD")
+    except FalhaApp as e:
+        c.log_robo("robo1_instagram", False, f"Instagram (navegador): {e}")
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(str(e)[:300])
+        return 0
+    try:
+        sync_playwright = _playwright()
+        _instalar_chromium()
+    except Exception as e:
+        return falha("não consegui instalar o navegador (%s)" % type(e).__name__, horas=1)
+    limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
+    novos = analisados = lidos = falhas = 0
+    with sync_playwright() as pw:
+        br = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        kw = dict(user_agent=UA, locale="en-US", timezone_id="America/Sao_Paulo", viewport={"width": 1366, "height": 800})
+        if os.path.exists(WEB_ESTADO):
+            kw["storage_state"] = WEB_ESTADO
+        ctx = br.new_context(**kw)
+        page = ctx.new_page()
+        try:
+            page.goto("https://www.instagram.com/", wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(2500)
+            if _logado(page):
+                print("sessão do navegador reaproveitada")
+            else:
+                print("sem sessão válida, login completo (única tentativa)")
+                try:
+                    _login_navegador(page, user, senha, seed)
+                except FalhaApp as e:
+                    br.close()
+                    return falha(str(e))
+                except Exception as e:
+                    br.close()
+                    return falha("erro no login pelo navegador: %s: %s" % (type(e).__name__, str(e)[:120]))
+                ctx.storage_state(path=WEB_ESTADO)
+                print("login ok, sessão salva")
+            for nome in perfis:
+                time.sleep(random.uniform(2, 5))
+                try:
+                    u = _perfil_web(page, nome)
+                except PermissionError as e:
+                    br.close()
+                    try:
+                        os.remove(WEB_ESTADO)
+                    except OSError:
+                        pass
+                    return falha(str(e), horas=1)
+                except Exception as e:
+                    falhas += 1
+                    print(f"perfil {nome}: {type(e).__name__}: {str(e)[:100]}")
+                    continue
+                if u.get("is_private"):
+                    continue
+                for it in itens_de_perfil(u, nome, limite):
+                    lidos += 1
+                    try:
+                        if not it["legenda"].strip() and not it["eh_video"]:
+                            continue
+                        a = c.analisar(it)
+                        ok, motivo = c.validar_analise(a)
+                        it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
+                        if c.fila_inserir(it):
+                            novos += 1
+                            analisados += ok
+                    except Exception as e:
+                        print("candidato falhou:", it.get("post_id"), e)
+            ctx.storage_state(path=WEB_ESTADO)
+        finally:
+            try:
+                br.close()
+            except Exception:
+                pass
+    if perfis and falhas >= len(perfis):
+        return falha("nenhum perfil pôde ser lido (%d falhas)" % falhas, horas=1)
+    c.log_robo("robo1_instagram", True, f"navegador: {len(perfis) - falhas} perfis lidos, {lidos} posts recentes, {novos} novos candidatos, {analisados} aprovados pela IA")
+    return 0
+
+
 def main():
     if not c.esta_chovendo():
         c.log_robo("robo1_instagram", True, "sem chuva nem previsão, dormindo")
@@ -274,7 +477,10 @@ def main():
         c.log_robo("robo1_instagram", True, "pausado (instagram_ativo=false em fontes.json): login recusado, sem insistir")
         return 0
     perfis = list(cfg["instagram"])
-    if cfg.get("instagram_backend", "app") == "app":
+    backend = cfg.get("instagram_backend", "browser")
+    if backend == "browser":
+        return main_browser(cfg, perfis)
+    if backend == "app":
         return main_app(cfg, perfis)
     perfis += [n for n in ler_estado().get("extras", []) if n not in perfis]
     try:
