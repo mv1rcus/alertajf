@@ -96,12 +96,11 @@ def candidatos(L, perfis):
         print("stories:", e)
 
 
-# ---- Descoberta de perfis novos (autorizado pelo Marcus): segue no máximo 3 por dia, sem retry ----
+# ---- Descoberta de perfis novos: só ADICIONA à varredura. Nunca segue ninguém (decisão do Marcus). ----
 ESTADO = os.path.join(c.AQUI, "..", ".ig-sessao", "estado.json")  # fica no cache do Actions, junto da sessão
 TEMA = ("notícia", "noticia", "jornal", "clima", "tempo", "chuva", "trânsito", "transito", "alagamento",
         "defesa civil", "ocorrência", "ocorrencia", "plantão", "plantao", "informa", "agora", "imprensa", "tv")
-MAX_FOLLOWS_DIA = 3
-PAUSA_FOLLOW_MIN = 5
+MAX_NOVOS_DIA = 3
 
 
 def ler_estado():
@@ -123,25 +122,12 @@ def eh_de_jf_e_do_tema(p):
     return de_jf and any(t in texto for t in TEMA)
 
 
-def seguir(L, p):
-    """Segue via sessão logada. Endpoint não oficial: qualquer recusa vira parada do dia."""
-    ctx = L.context
-    r = ctx._session.post(f"https://www.instagram.com/api/v1/friendships/create/{p.userid}/",
-                          headers={"x-csrftoken": ctx._session.cookies.get("csrftoken", ""), "x-ig-app-id": "936619743392459",
-                                   "x-requested-with": "XMLHttpRequest", "referer": f"https://www.instagram.com/{p.username}/"},
-                          timeout=30)
-    if r.status_code != 200 or '"status":"ok"' not in r.text.replace(" ", ""):
-        raise RuntimeError(f"follow recusado (HTTP {r.status_code})")
-
-
 def descobrir(L, itens):
     import re
     hoje = c.agora().date().isoformat()
     e = ler_estado()
     if e.get("dia") != hoje:
-        e["dia"], e["follows"] = hoje, 0
-    if e.get("parado_ate_dia") == hoje:
-        return
+        e["dia"], e["novos"] = hoje, 0
     conhecidos = {n.lower() for n in json.load(open(os.path.join(c.AQUI, "fontes.json")))["instagram"]}
     conhecidos |= {n.lower() for n in e.get("extras", [])} | {n.lower() for n in e.get("avaliados", [])}
     mencoes = []
@@ -150,34 +136,21 @@ def descobrir(L, itens):
             m = m.strip(".").lower()
             if m not in conhecidos and m not in mencoes:
                 mencoes.append(m)
-    pendente = e.get("pendente")
-    if pendente and time.time() - pendente.get("ts", 0) > 7 * 86400:
-        e.pop("pendente")
-        pendente = None
-    for nome in mencoes[:4]:  # no máx. 4 consultas por ciclo
-        if e["follows"] >= MAX_FOLLOWS_DIA:
-            break
-        if time.time() - e.get("ultimo_follow", 0) < PAUSA_FOLLOW_MIN * 60:
+    for nome in mencoes[:4]:  # no máx. 4 consultas de perfil por ciclo
+        if e["novos"] >= MAX_NOVOS_DIA:
             break
         time.sleep(random.uniform(3, 6))
         e.setdefault("avaliados", []).append(nome)
         try:
             p = instaloader.Profile.from_username(L.context, nome)
-            if not eh_de_jf_e_do_tema(p):
-                continue
-            if p.is_private and pendente:
-                continue  # no máx. 1 solicitação pendente por vez
-            seguir(L, p)
-            e["follows"] += 1
-            e["ultimo_follow"] = time.time()
+            if p.is_private or not eh_de_jf_e_do_tema(p):
+                continue  # privado não dá pra ler sem seguir, e não seguimos
+            e["novos"] += 1
             e.setdefault("extras", []).append(nome)
-            if p.is_private:
-                e["pendente"] = pendente = {"nome": nome, "ts": time.time()}
-            c.log_robo("robo1_instagram", True, f"perfil novo seguido: @{nome}")
+            c.log_robo("robo1_instagram", True, f"perfil novo adicionado à varredura: @{nome}")
         except Exception as ex:
-            e["parado_ate_dia"] = hoje  # recusou ou erro: para o dia, sem retry
-            c.log_robo("robo1_instagram", False, f"descoberta parou hoje ({nome}): {str(ex)[:120]}")
-            break
+            print(f"descoberta @{nome}: {ex}")
+            break  # qualquer erro: para por este ciclo
     gravar_estado(e)
 
 
