@@ -1,0 +1,26 @@
+name: Diagnostico embed (so leitura)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ler 3 perfis pela pagina de embed
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, re, json, time
+          for nome in ["transitojuizdefora", "jfdepressao", "noticiasjf1"]:
+              try:
+                  rq = urllib.request.Request("https://www.instagram.com/%s/embed/" % nome, headers={"User-Agent": "Mozilla/5.0"})
+                  t = urllib.request.urlopen(rq, timeout=30).read().decode("utf-8", "replace")
+                  n = len(re.findall(r'shortcode', t))
+                  print(nome, "HTTP 200, bytes", len(t), "ocorrencias de shortcode:", n, "contextJSON:", "contextJSON" in t)
+              except urllib.error.HTTPError as e:
+                  print(nome, "HTTP", e.code)
+              except Exception as e:
+                  print(nome, "FALHOU:", type(e).__name__, str(e)[:120])
+              time.sleep(2)
+          PY
