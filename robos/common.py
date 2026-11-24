@@ -6,7 +6,7 @@ PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_wGd
 SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 JANELA_HORAS = 2  # cada pino dura 2h (mesma janela de expiração dos relatos do site)
-JF_BBOX = (-21.90, -21.60, -43.60, -43.15)  # lat_min, lat_max, lon_min, lon_max
+JF_BBOX = (-22.00, -21.52, -43.69, -43.14)  # lat_min, lat_max, lon_min, lon_max: caixa em volta do polígono do município (robos/jf_poligono.json)
 UA = "AlertaJF-robos/1.0 (+https://github.com/mvthebest/alertajf)"
 try:
     sys.stdout.reconfigure(line_buffering=True)  # log aparece na hora, mesmo se o job for cortado
@@ -233,6 +233,19 @@ def _norm(s):
     return "".join(c for c in unicodedata.normalize("NFD", s.lower()) if unicodedata.category(c) != "Mn").strip()
 
 
+def ponto_em_jf(lat, lon):
+    """True se o ponto está dentro do polígono do município (mesmo de src/lib/raios.ts)."""
+    pts = json.load(open(os.path.join(AQUI, "jf_poligono.json")))["pontos"]
+    dentro, j = False, len(pts) - 1
+    for i in range(len(pts)):
+        xi, yi = pts[i]
+        xj, yj = pts[j]
+        if (yi > lat) != (yj > lat) and lon < (xj - xi) * (lat - yi) / (yj - yi) + xi:
+            dentro = not dentro
+        j = i
+    return dentro
+
+
 def geocodificar(rua, bairro):
     """(lat, lon, bairro_final) ou None. Nominatim restrito a JF; cai no centro do bairro."""
     b_norm = _norm(bairro or "")
@@ -246,7 +259,7 @@ def geocodificar(rua, bairro):
             r = http("GET", u)
             if r:
                 la, lo = float(r[0]["lat"]), float(r[0]["lon"])
-                if JF_BBOX[0] <= la <= JF_BBOX[1] and JF_BBOX[2] <= lo <= JF_BBOX[3]:
+                if ponto_em_jf(la, lo):
                     return la, lo, (centro["nome"] if centro else (bairro or "Juiz de Fora"))
         except Exception as e:
             print("nominatim falhou:", e)
