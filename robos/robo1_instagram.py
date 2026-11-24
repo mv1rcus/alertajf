@@ -25,7 +25,12 @@ def logar():
     user, senha = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD")
     if not user or not senha:
         raise RuntimeError("Faltam os secrets IG_USERNAME/IG_PASSWORD")
-    sessao = os.path.join(c.AQUI, "..", ".ig-sessao")
+    pasta = os.path.join(c.AQUI, "..", ".ig-sessao")  # pasta guardada no cache do Actions entre runs
+    if os.path.isfile(pasta):  # formato antigo (arquivo): troca por pasta
+        os.remove(pasta)
+    os.makedirs(pasta, exist_ok=True)
+    sessao = os.path.join(pasta, "sessao")
+    bloqueio = os.path.join(pasta, "bloqueio")
     if os.path.exists(sessao):
         try:
             L.load_session_from_file(user, sessao)
@@ -33,13 +38,27 @@ def logar():
             return L
         except Exception as e:
             print("sessão salva não serviu, logando de novo:", e)
+    # Login completo é raro: no máximo 1 tentativa por hora (depois de falhar, espera, sem martelar).
+    if os.path.exists(bloqueio):
+        try:
+            falta = 3600 - (time.time() - float(open(bloqueio).read().strip()))
+        except Exception:
+            falta = 0
+        if falta > 0:
+            raise RuntimeError("login em espera depois de falha recente (%d min restantes)" % (falta // 60 + 1))
     try:
-        L.login(user, senha)
-    except instaloader.exceptions.TwoFactorAuthRequiredException:
-        seed = os.environ.get("IG_TOTP_SECRET")
-        if not seed:
-            raise RuntimeError("Instagram pediu 2FA e falta o secret IG_TOTP_SECRET")
-        L.two_factor_login(totp(seed))
+        try:
+            L.login(user, senha)
+        except instaloader.exceptions.TwoFactorAuthRequiredException:
+            seed = os.environ.get("IG_TOTP_SECRET")
+            if not seed:
+                raise RuntimeError("Instagram pediu 2FA e falta o secret IG_TOTP_SECRET")
+            L.two_factor_login(totp(seed))
+    except Exception:
+        open(bloqueio, "w").write(str(time.time()))
+        raise
+    if os.path.exists(bloqueio):
+        os.remove(bloqueio)
     L.save_session_to_file(sessao)
     return L
 
