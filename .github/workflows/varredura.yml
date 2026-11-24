@@ -21,6 +21,7 @@ env:
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   FORCAR_VARREDURA: ${{ inputs.forcar && '1' || '0' }}
   IG_TOTP_SECRET: ${{ secrets.IG_TOTP_SECRET }}
+  APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
 defaults:
   run:
     working-directory: robos

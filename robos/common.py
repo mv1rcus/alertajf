@@ -71,6 +71,19 @@ def log_robo(robo, ok, resumo):
 
 
 # ---------- portão de chuva ----------
+def chuva_confirmada():
+    """True só com chuva medida na última hora (sem contar previsão). Usado para economizar cota de serviços pagos no plano grátis."""
+    if os.environ.get("FORCAR_VARREDURA") == "1":
+        return True
+    u = ("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503"
+         "&minutely_15=precipitation&past_minutely_15=4&forecast_minutely_15=0&timezone=UTC")
+    try:
+        mm = [x or 0 for x in http("GET", u)["minutely_15"]["precipitation"]]
+        return sum(mm[:4]) >= 0.3
+    except Exception:
+        return False
+
+
 def esta_chovendo():
     """Acorda os robôs se choveu em JF na última hora OU se há chuva prevista na próxima hora.
     Fonte: Open-Meteo (grátis, sem chave). Sem chuva nem previsão, os robôs dormem."""
