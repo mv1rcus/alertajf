@@ -93,12 +93,6 @@
         "reserva": true,
         "credito_unico": true,
         "ordem": 2
-      },
-      "brightdata": {
-        "mes": 4800,
-        "dia": 180,
-        "reserva": true,
-        "ordem": 4
       }
     },
     "stories": {
