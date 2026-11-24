@@ -53,6 +53,15 @@ def t(el, tag):
     return (el.findtext(CAP + tag) or "").strip()
 
 
+def _data(v):
+    """Data ISO com fuso em UTC, ou None se vier vazia/malformada."""
+    try:
+        d = datetime.fromisoformat(str(v).strip().replace("Z", "+00:00"))
+        return (d if d.tzinfo else d.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
 def ler(caminho):
     achados = []
     for _, el in ET.iterparse(caminho, events=("end",)):
@@ -119,15 +128,19 @@ def main():
     for cid in CANCELADOS:
         por_id.pop(cid, None)  # alerta cancelado sai do arquivo
     agora_utc = datetime.now(timezone.utc)
-    for aid, a in list(por_id.items()):  # vencido não fica como atual
-        try:
-            if a.get("expira") and datetime.fromisoformat(a["expira"]).astimezone(timezone.utc) < agora_utc:
-                por_id.pop(aid)
-        except ValueError:
-            pass
-    corte = (datetime.now(timezone.utc) - timedelta(days=GUARDAR_DIAS)).isoformat()
-    lista = [a for a in por_id.values() if datetime.fromisoformat(a["emitido"]).astimezone(timezone.utc).isoformat() >= corte]
-    lista.sort(key=lambda a: datetime.fromisoformat(a["emitido"]), reverse=True)
+    corte = agora_utc - timedelta(days=GUARDAR_DIAS)
+    lista = []
+    for a in por_id.values():
+        # um alerta com data ruim é pulado sozinho; nunca congela o arquivo inteiro
+        emitido = _data(a.get("emitido"))
+        if emitido is None or emitido < corte:
+            continue
+        exp = _data(a.get("expira"))
+        if exp is not None and exp < agora_utc:  # vencido não fica como atual
+            continue
+        lista.append((emitido, a))
+    lista.sort(key=lambda x: x[0], reverse=True)
+    lista = [a for _, a in lista]
     saida = {"fonte": "Defesa Civil Alerta (IDAP/MIDR)", "fonte_atualizada_em": feed_atualizado or fonte_atualizada_antiga, "alertas": lista[:MAX_ALERTAS]}
     novo = json.dumps(saida, ensure_ascii=False, indent=2) + "\n"
     if os.path.exists(SAIDA) and open(SAIDA, encoding="utf-8").read() == novo:
