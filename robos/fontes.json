@@ -83,6 +83,13 @@
         "reserva": true,
         "ordem": 1,
         "valido_ate": "2026-12-01"
+      },
+      "creatorcrawl": {
+        "mes": 50,
+        "dia": 15,
+        "reserva": true,
+        "credito_unico": true,
+        "ordem": 3
       }
     },
     "stories": {
