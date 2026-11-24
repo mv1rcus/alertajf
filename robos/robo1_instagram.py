@@ -849,15 +849,15 @@ def main():
         c.log_robo("robo1_instagram", True, "pausado (instagram_ativo=false em fontes.json): login recusado, sem insistir")
         return 0
     perfis = list(cfg["instagram"])
-    backend = cfg.get("instagram_backend", "browser")
-    if backend == "servicos":
-        return main_servicos(cfg)
-    if backend == "diag":
+    # Login direto no Instagram DESATIVADO (24/11): risco de ban e a conta nunca é aberta pelo robô.
+    # Qualquer valor de instagram_backend cai em "servicos" (leitura por serviços de terceiros). "diag" não envia credenciais.
+    if cfg.get("instagram_backend") == "diag":
         return main_diag()
-    if backend == "browser":
-        return main_browser(cfg, perfis)
-    if backend == "app":
-        return main_app(cfg, perfis)
+    return main_servicos(cfg)
+
+
+def _main_login_direto_desativado(cfg, perfis):  # código antigo, inalcançável; mantido só como referência
+    backend = "legado"
     perfis += [n for n in ler_estado().get("extras", []) if n not in perfis]
     try:
         L = logar()
