@@ -23,9 +23,13 @@ async function obtainSession(): Promise<string> {
   let saved: Session | null = null;
   try { saved = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch { /* disabled storage or invalid data */ }
   if (saved?.access_token && saved.expires_at > Date.now()/1000 + 60) return saved.access_token;
-  const data = saved?.refresh_token
-    ? await request('/auth/v1/token?grant_type=refresh_token', {refresh_token: saved.refresh_token})
-    : await request('/auth/v1/signup', {data: {app: 'alertajf'}});
+  let data: any = null;
+  if (saved?.refresh_token) {
+    // refresh_token vencido/inválido não pode deixar o usuário sem relatar/apoiar: apaga a sessão e cria outra
+    try { data = await request('/auth/v1/token?grant_type=refresh_token', {refresh_token: saved.refresh_token}); }
+    catch { try { localStorage.removeItem(storageKey); } catch { /* storage indisponível */ } data = null; }
+  }
+  if (!data?.access_token) data = await request('/auth/v1/signup', {data: {app: 'alertajf'}});
   if (!data?.access_token || !data?.refresh_token) throw new ReportError('Não foi possível iniciar a sessão anônima. Tente mais tarde.');
   const session: Session = {access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at || Date.now()/1000 + data.expires_in};
   try { localStorage.setItem(storageKey, JSON.stringify(session)); }
