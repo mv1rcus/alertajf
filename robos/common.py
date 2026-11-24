@@ -209,7 +209,11 @@ def validar_analise(a):
         return False, "tipo inválido"
     if not (a.get("rua") or a.get("bairro")):
         return False, "sem local"
-    if float(a.get("confianca") or 0) < 0.6:
+    try:
+        conf = float(a.get("confianca") or 0)
+    except (TypeError, ValueError):  # a IA às vezes devolve "alta" ou "0,8"
+        return False, "confiança inválida"
+    if conf < 0.6:
         return False, "confiança baixa"
     try:
         t = dt.datetime.fromisoformat(a["ocorrido_em"].replace("Z", "+00:00"))
