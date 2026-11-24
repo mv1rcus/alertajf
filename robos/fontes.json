@@ -43,5 +43,5 @@
   ],
   "instagram_ativo": true,
   "instagram_liberar": "t3",
-  "instagram_backend": "browser"
+  "instagram_backend": "diag"
 }
