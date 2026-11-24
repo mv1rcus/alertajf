@@ -31,7 +31,7 @@ def feed_local(nome, url):
 
 
 def main():
-    if not c.esta_chovendo():
+    if not c.portao_aberto():
         c.log_robo("robo2_noticias", True, "sem chuva nem previsão, dormindo")
         return 0
     fontes = json.load(open(os.path.join(c.AQUI, "fontes.json")))

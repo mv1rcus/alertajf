@@ -142,6 +142,14 @@ def esta_chovendo():
         return True
 
 
+def portao_aberto():
+    """No Actions o job só roda se o portão disse chove=true (condição do workflow): confia nele e NÃO consulta de novo,
+    senão a regra "só previsão" (1 ciclo por quarto de hora) fazia robôs discordarem do portão. Fora do Actions, consulta."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return True
+    return esta_chovendo()
+
+
 # ---------- IA (Gemini, camada gratuita) ----------
 PROMPT_ANALISE = """Você filtra posts para o AlertaJF, um mapa de ocorrências de chuva em Juiz de Fora (MG).
 Agora (UTC): {agora}. Post de {autor} publicado em {publicado}.
