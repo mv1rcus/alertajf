@@ -25,6 +25,7 @@ env:
   SCRAPPA_KEY: ${{ secrets.SCRAPPA_KEY }}
   SOCIALTAP_KEY: ${{ secrets.SOCIALTAP_KEY }}
   MAVIAPI_KEY: ${{ secrets.MAVIAPI_KEY }}
+  CREATORCRAWL_KEY: ${{ secrets.CREATORCRAWL_KEY }}
 defaults:
   run:
     working-directory: robos
