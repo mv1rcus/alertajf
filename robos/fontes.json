@@ -109,8 +109,8 @@
       }
     },
     "stories": {
-      "max_perfis": 8,
-      "intervalo_min": 30,
+      "max_perfis": 12,
+      "intervalo_min": 60,
       "teto_dia": 60,
       "teto_mes": 800
     },
