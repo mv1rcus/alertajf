@@ -5,7 +5,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fnpssjnsljhwdoikfwcu.supa
 PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_wGdx39fLd5BbXzet5qSOsQ_thFUqn-m")
 SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-JANELA_HORAS = 5  # mesma janela de expiração dos relatos do site
+JANELA_HORAS = 2  # cada pino dura 2h (mesma janela de expiração dos relatos do site)
 JF_BBOX = (-21.90, -21.60, -43.60, -43.15)  # lat_min, lat_max, lon_min, lon_max
 UA = "AlertaJF-robos/1.0 (+https://github.com/mvthebest/alertajf)"
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -181,7 +181,7 @@ def validar_analise(a):
         return False, "sem horário do ocorrido"
     idade = agora() - t
     if idade > dt.timedelta(hours=JANELA_HORAS - 0.25) or idade < dt.timedelta(minutes=-5):
-        return False, "fora da janela de 5h (chuva atual)"
+        return False, "fora da janela de 2h (chuva atual)"
     return True, ""
 
 
