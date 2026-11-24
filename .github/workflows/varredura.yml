@@ -58,7 +58,7 @@ jobs:
           restore-keys: ig-sessao-
       - run: pip install --quiet instaloader
       - run: python3 robo1_instagram.py
-      - name: Abrir issue se o login do Instagram caiu
+      - name: Abrir issue se a leitura do Instagram falhou
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,7 +67,7 @@ jobs:
           if [ -f .ig-falhou ]; then
             if [ -z "$(gh issue list --state open --label robo-instagram --json number -q '.[0].number')" ]; then
               gh label create robo-instagram --color D93F0B 2>/dev/null || true
-              gh issue create --label robo-instagram --title "Robô do Instagram: login caiu, precisa de ação" --body "O robô não conseguiu entrar na conta do Instagram. Veja docs/ROBOS.md (seção 'Instagram caiu') para o passo a passo. O Google Notícias continua alimentando o site. Erro: $(cat .ig-falhou)"
+              gh issue create --label robo-instagram --title "Leitura do Instagram falhou" --body "O robô não conseguiu ler os perfis do Instagram pelos serviços externos (o robô não faz login no Instagram). O Google Notícias e os RSS continuam alimentando o site. Erro: $(cat .ig-falhou)"
             fi
           fi
 
