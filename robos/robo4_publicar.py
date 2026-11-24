@@ -37,10 +37,12 @@ def main():
             a = it["analise"]
             ok, motivo = c.validar_analise(a)  # revalida: o tempo passou desde a análise
             if not ok:
+                print("descartado:", it["post_id"], motivo)
                 c.fila_atualizar(it["id"], estado="descartado", motivo=motivo)
                 continue
             geo = c.geocodificar(a.get("rua", ""), a.get("bairro", ""))
             if not geo:
+                print("descartado:", it["post_id"], "local não encontrado em JF", a.get("rua"), a.get("bairro"))
                 c.fila_atualizar(it["id"], estado="descartado", motivo="local não encontrado em JF")
                 continue
             lat, lon, bairro = geo

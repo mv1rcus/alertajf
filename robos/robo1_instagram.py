@@ -518,7 +518,7 @@ def _ler_apify(nome, chave):
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1)}
 
 
-def main_servicos(cfg):
+def _main_posts(cfg):
     """Instagram por serviços de terceiros em planos grátis (sem cartão). Modo econômico: só com chuva confirmada,
     poucos perfis por varredura em rodízio, intervalo mínimo e tetos por serviço (dia e mês) gravados no estado."""
     sv = cfg.get("servicos", {})
@@ -612,6 +612,98 @@ def main_servicos(cfg):
         return 0
     c.log_robo("robo1_instagram", True, "Instagram via " + msg)
     return 0
+
+
+def _ler_stories_apify(nomes, chave):
+    """Stories ativos (24h) dos perfis, numa execução só. Cobra por perfil processado, não por story."""
+    return _post_json("https://api.apify.com/v2/acts/lance_api~instagram-stories-scraper-api/run-sync-get-dataset-items?timeout=120",
+                      {"Authorization": "Bearer " + chave}, {"usernames": nomes, "includeFullStoryData": True}, 150)
+
+
+def _texto_story(r):
+    partes = [r.get("caption") or ""]
+    partes += [("Local: " + (l.get("name") or l.get("title") or "")) for l in (r.get("locations") or []) if isinstance(l, dict)]
+    partes += ["#" + h for h in (r.get("hashtags") or [])]
+    return " ".join(x for x in partes if x).strip()
+
+
+def main_stories(cfg):
+    """Stories dos perfis prioritários (só o Apify lê story ativo no plano grátis). Só com chuva confirmada,
+    a cada 30 min, teto de leituras por dia e por mês gravado no estado, pausa em 402/403/429. Story vira candidato igual post."""
+    st = cfg.get("servicos", {}).get("stories")
+    chave = os.environ.get("APIFY_TOKEN")
+    if not st or not chave or not c.chuva_confirmada():
+        return 0
+    perfis = (st.get("perfis") or cfg["servicos"].get("perfis") or [])[:st.get("max_perfis", 8)]
+    agora = dt.datetime.now(dt.timezone.utc)
+    mes, dia = agora.strftime("%Y-%m"), agora.strftime("%Y-%m-%d")
+    uso = _uso()
+    u = uso.setdefault("stories", {})
+    if u.get("mes") != mes:
+        u.update(mes=mes, usado=0)
+    if u.get("dia") != dia:
+        u.update(dia=dia, dia_usado=0)
+    if time.time() - u.get("ultimo", 0) < st.get("intervalo_min", 30) * 60 - 60:
+        return 0
+    if time.time() < u.get("pausa_ate", 0):
+        print("stories: serviço em pausa")
+        return 0
+    if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
+        c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))
+        return 0
+    u["ultimo"] = time.time()
+    u["usado"] += len(perfis)  # conta antes: se cair no meio, o gasto já está contado
+    u["dia_usado"] += len(perfis)
+    _salvar_uso(uso)
+    try:
+        linhas = _ler_stories_apify(perfis, chave)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 402, 403, 429):
+            u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
+            _salvar_uso(uso)
+        c.log_robo("robo1_instagram", False, "Stories (apify): HTTP %s" % e.code)
+        return 0
+    except Exception as e:
+        c.log_robo("robo1_instagram", False, "Stories (apify): %s %s" % (type(e).__name__, str(e)[:100]))
+        return 0
+    limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
+    lidos = novos = aprov = 0
+    for r in linhas:
+        try:
+            if r.get("status") != "success" or not r.get("storyId"):
+                continue
+            nome = r.get("username") or ""
+            quando = dt.datetime.fromisoformat(str(r.get("postedAt")).replace("Z", "+00:00"))
+            if quando < limite:
+                continue
+            texto = _texto_story(r)
+            lidos += 1
+            if not texto:  # a IA só lê texto: story sem legenda/local não dá pra avaliar
+                continue
+            video = (r.get("mediaType") or "") == "video"
+            it = dict(origem="instagram", post_id="story-" + str(r["storyId"]), autor=f"@{nome}",
+                      url=f"https://www.instagram.com/stories/{nome}/{r['storyId']}/", legenda="(Story de 24h) " + texto,
+                      publicado_em=quando.isoformat(), midia_url=(r.get("videoUrl") if video else (r.get("imageUrl") or r.get("mediaUrl"))) or r.get("mediaUrl"), eh_video=video)
+            a = c.analisar(it)
+            ok, motivo = c.validar_analise(a)
+            it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
+            if c.fila_inserir(it):
+                novos += 1
+                aprov += ok
+        except Exception as e:
+            print("story falhou:", r.get("storyId"), e)
+    c.log_robo("robo1_instagram", True, "Stories via apify: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (leituras: dia %d/%d, mês %d/%d)" % (
+        len(perfis), lidos, novos, aprov, u["dia_usado"], st.get("teto_dia", 60), u["usado"], st.get("teto_mes", 800)))
+    return 0
+
+
+def main_servicos(cfg):
+    r = _main_posts(cfg)
+    try:
+        main_stories(cfg)
+    except Exception as e:
+        print("stories falhou:", type(e).__name__, str(e)[:120])
+    return r
 
 
 def main_diag():
