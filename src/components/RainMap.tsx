@@ -3,7 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Ponto } from "@/lib/pontos";
 import type { RainViewerData } from "@/lib/rainviewer";
-import { reportMediaUrl } from "@/lib/reports";
+import { reportMediaUrl, type ReportMedia } from "@/lib/reports";
 
 const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", sem_luz: "💡", relato: "📍" };
 const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", sem_luz: "#6b5bb5", relato: "#127e86" };
@@ -56,21 +56,50 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
       popup.append(name, text);
       if (p.media?.length) {
         const box = document.createElement("div"); box.className = "popup-media";
-        p.media.forEach(m => {
+        const makeItem = (m: ReportMedia) => {
           const url = reportMediaUrl(m.path);
           if (m.kind === "video") {
             // O src precisa estar no elemento desde já: sem ele o play nativo dos
             // controles fica carregando para sempre. Com preload="none" o navegador
             // não baixa nada até a pessoa tocar no play do próprio player.
             const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none"; v.src = url;
-            box.append(v);
-          } else {
-            const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-            const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
-            a.append(img); box.append(a);
+            return v;
           }
+          const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+          const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
+          a.append(img); return a;
+        };
+        if (p.media.length === 1) {
+          const m = p.media[0]!;
+          box.append(makeItem(m));
           if (m.credit) { const c = document.createElement("small"); c.textContent = `Mídia: ${m.credit}`; box.append(c); }
-        });
+        } else {
+          // Várias mídias empilhadas estouram a altura do popup no celular e o
+          // conteúdo não rola. Carrossel: uma mídia por vez, setas e indicadores.
+          const car = document.createElement("div"); car.className = "popup-media-carousel";
+          const vp = document.createElement("div"); vp.className = "popup-media-viewport";
+          const track = document.createElement("div"); track.className = "popup-media-track";
+          p.media.forEach(m => { const slide = document.createElement("div"); slide.className = "popup-media-slide"; slide.append(makeItem(m)); track.append(slide); });
+          vp.append(track); car.append(vp);
+          const dots = document.createElement("div"); dots.className = "popup-media-dots";
+          const credit = document.createElement("small"); credit.className = "popup-media-credit";
+          let i = 0;
+          const go = (k: number) => {
+            i = (k + p.media!.length) % p.media!.length;
+            track.style.transform = `translateX(-${i * 100}%)`;
+            [...dots.children].forEach((d, k2) => d.classList.toggle("on", k2 === i));
+            track.querySelectorAll("video").forEach((v, k2) => { if (k2 !== i) v.pause(); });
+            const cr = p.media![i]!.credit;
+            credit.textContent = cr ? `Mídia: ${cr}` : ""; credit.style.display = cr ? "" : "none";
+          };
+          p.media.forEach((_, k) => { const d = document.createElement("button"); d.type = "button"; d.setAttribute("aria-label", `Mídia ${k + 1} de ${p.media!.length}`); d.addEventListener("click", () => go(k)); dots.append(d); });
+          const nav = (label: string, cls: string, step: number, aria: string) => {
+            const b = document.createElement("button"); b.type = "button"; b.className = `popup-media-nav ${cls}`; b.textContent = label; b.setAttribute("aria-label", aria);
+            b.addEventListener("click", () => go(i + step)); return b;
+          };
+          car.append(nav("\u2039", "prev", -1, "Mídia anterior"), nav("\u203a", "next", 1, "Próxima mídia"));
+          box.append(car, dots, credit); go(0);
+        }
         popup.append(box);
       }
       return popup;
