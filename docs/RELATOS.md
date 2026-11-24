@@ -54,3 +54,5 @@ Supabase Free pode pausar por inatividade e tem cotas. Não há garantia de disp
 - O popup do pino mostra a foto (toque abre em tela cheia) ou o vídeo com play; crédito da fonte aparece quando informado.
 - Instalação: `docs/RELATOS-MIDIA.sql` (idempotente). Supabase Free: 1 GB de armazenamento e 2 GB de banda/mês; vídeos grandes consomem banda a cada reprodução — monitorar se o uso crescer.
 - Fotos e vídeos podem conter metadados do aparelho (EXIF). O formulário avisa que o anexo fica público e pede para não enviar pessoas nem dados pessoais.
+
+Documentacao do projeto no README.
