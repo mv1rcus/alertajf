@@ -573,10 +573,37 @@ def _ler_creatorcrawl(nome, chave):
     return out
 
 
+def _ler_herascrape(nome, chave):
+    """herascrape: 1 chamada para o id do perfil (guardado no estado, só na 1a vez) + 1 para o grid de posts (US$0,0004/chamada)."""
+    h = {"X-Api-Key": chave}
+    ids = c.estado_ler("herascrape_ids")
+    ids = ids if isinstance(ids, dict) else {}
+    if nome not in ids:
+        d = _post_json("https://api.herascrape.com/users/username/" + urllib.parse.quote(nome), h, None, 60)
+        pk = ((d.get("data") or {}).get("pk"))
+        if not pk:
+            return []
+        ids[nome] = str(pk)
+        c.estado_gravar("herascrape_ids", ids)
+    d = _post_json("https://api.herascrape.com/users/" + ids[nome] + "/posts", h, None, 60)
+    out = []
+    for it in ((d.get("data") or {}).get("feed") or {}).get("profile_grid_items") or []:
+        n = it.get("media") or {}
+        if not n:
+            continue
+        video = bool(n.get("video_versions")) or n.get("media_type") == 2
+        foto = (((n.get("image_versions2") or {}).get("candidates") or [{}])[0]).get("url")
+        vurl = ((n.get("video_versions") or [{}])[0]).get("url")
+        out.append(dict(shortcode=n.get("code"), legenda=(n.get("caption") or {}).get("text") or "", quando=n.get("taken_at") or "",
+                        video=video, midia=vurl if video else foto))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
             "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1),
-            "creatorcrawl": ("CREATORCRAWL_KEY", _ler_creatorcrawl, 1)}
+            "creatorcrawl": ("CREATORCRAWL_KEY", _ler_creatorcrawl, 1),
+            "herascrape": ("HERASCRAPE_KEY", _ler_herascrape, 1)}
 
 
 def _main_posts(cfg):
