@@ -30,3 +30,5 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+<!-- retry deploy: forcar build do #53 apos limite de cota da Vercel -->
