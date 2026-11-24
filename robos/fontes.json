@@ -86,6 +86,13 @@
         "reserva": true,
         "credito_unico": true,
         "ordem": 3
+      },
+      "herascrape": {
+        "mes": 2400,
+        "dia": 25,
+        "reserva": true,
+        "credito_unico": true,
+        "ordem": 2
       }
     },
     "stories": {
