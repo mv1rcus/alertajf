@@ -6,6 +6,11 @@
 # "fonte_atualizada_em" (batimento do feed, sem mudança de alerta) não gera deploy.
 # Qualquer outra mudança (código ou alerta novo/alterado/removido) builda normal.
 
+# Commit que só mexe nos robôs, workflows, docs, scripts ou migrations não muda o site: pula o deploy.
+if ! git diff --name-only HEAD^ HEAD | grep -qvE '^(robos/|\.github/|docs/|scripts/|supabase/)'; then
+  exit 0
+fi
+
 # Se o diff tocou qualquer arquivo além do JSON de dados, builda.
 if git diff --name-only HEAD^ HEAD | grep -qv '^public/defesa-civil\.json$'; then
   exit 1
