@@ -16,6 +16,7 @@ export default function AutoAlert() {
   const [motivos, setMotivos] = useState<string[]>([]);
   const [aberto, setAberto] = useState(false);
   const [hora, setHora] = useState("");
+  const [leitura, setLeitura] = useState<"carregando" | "ok" | "falhou">("carregando"); // falha de fonte nunca vira "sem risco"
   const anterior = useRef<Nivel>("normal");
 
   useEffect(() => {
@@ -24,11 +25,11 @@ export default function AutoAlert() {
       try {
         const r = avaliarRisco(await buscarClima());
         if (!vivo) return;
-        setNivel(r.nivel); setMotivos(r.motivos);
+        setNivel(r.nivel); setMotivos(r.motivos); setLeitura("ok");
         setHora(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
         if (r.nivel === "critico" && anterior.current !== "critico") { setAberto(true); sirene(); }
         anterior.current = r.nivel;
-      } catch { /* sem conexão */ }
+      } catch { if (vivo) setLeitura("falhou"); }
     };
     checar();
     const t = setInterval(checar, 5 * 60 * 1000);
@@ -36,12 +37,13 @@ export default function AutoAlert() {
   }, []);
 
   const cor = nivel === "critico" ? "bg-destructive text-destructive-foreground animate-pulse" : nivel === "atencao" ? "bg-warning text-warning-foreground" : "bg-muted text-muted-foreground";
-  const texto = nivel === "critico" ? "🚨 RISCO CRÍTICO AGORA" : nivel === "atencao" ? "⚠ Atenção: tempo instável" : "✓ Sem risco detectado no momento";
+  const semLeitura = leitura !== "ok";
+  const texto = semLeitura ? (leitura === "carregando" ? "Lendo o clima…" : "Sem leitura do clima agora. Isso não significa ausência de risco.") : nivel === "critico" ? "🚨 RISCO CRÍTICO AGORA" : nivel === "atencao" ? "⚠ Atenção: tempo instável" : "✓ Sem risco detectado no momento";
 
   return (
     <>
       <div className={`pointer-events-auto inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-semibold shadow-lg ${cor}`}>
-        <span className="truncate">{texto}{motivos.length > 0 && ` — ${motivos.join(" · ")}`}{hora && ` · ${hora}`}</span>
+        <span className="truncate">{texto}{!semLeitura && motivos.length > 0 && ` — ${motivos.join(" · ")}`}{!semLeitura && hora && ` · ${hora}`}</span>
       </div>
       {aberto && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-foreground/60 p-4" role="alertdialog">
