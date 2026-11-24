@@ -446,6 +446,8 @@ def main_browser(cfg, perfis):
                     try:
                         if not it["legenda"].strip() and not it["eh_video"]:
                             continue
+                        if c.ja_na_fila(it):
+                            continue
                         a = c.analisar(it)
                         ok, motivo = c.validar_analise(a)
                         it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
@@ -640,6 +642,8 @@ def _main_posts(cfg):
                 lidos += 1
                 if not it["legenda"].strip() and not it["eh_video"]:
                     continue
+                if c.ja_na_fila(it):
+                    continue
                 a = c.analisar(it)
                 ok, motivo = c.validar_analise(a)
                 it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
@@ -729,6 +733,8 @@ def main_stories(cfg):
             it = dict(origem="instagram", post_id="story-" + str(r["storyId"]), autor=f"@{nome}",
                       url=f"https://www.instagram.com/stories/{nome}/{r['storyId']}/", legenda="(Story de 24h) " + texto,
                       publicado_em=quando.isoformat(), midia_url=(r.get("videoUrl") if video else (r.get("imageUrl") or r.get("mediaUrl"))) or r.get("mediaUrl"), eh_video=video)
+            if c.ja_na_fila(it):
+                continue
             a = c.analisar(it)
             ok, motivo = c.validar_analise(a)
             it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
@@ -808,6 +814,8 @@ def main():
         try:
             if not it["legenda"].strip() and not it["eh_video"]:
                 continue
+            if c.ja_na_fila(it):
+                continue
             a = c.analisar(it)
             ok, motivo = c.validar_analise(a)
             it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
@@ -850,6 +858,8 @@ def main_app(cfg, perfis):
             lidos += 1
             try:
                 if not it["legenda"].strip() and not it["eh_video"]:
+                    continue
+                if c.ja_na_fila(it):
                     continue
                 a = c.analisar(it)
                 ok, motivo = c.validar_analise(a)

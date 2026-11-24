@@ -53,6 +53,16 @@ def fila_inserir(item):
     return bool(r)
 
 
+def ja_na_fila(item):
+    """True se (origem, post_id) já está na fila: não gasta IA reanalisando o que já foi visto."""
+    try:
+        r = _sb("GET", "ajf_fila?select=id&origem=eq.%s&post_id=eq.%s&limit=1" % (urllib.parse.quote(item["origem"]), urllib.parse.quote(str(item["post_id"]))))
+        return bool(r)
+    except Exception as e:
+        print("checagem da fila falhou, seguindo:", e)
+        return False
+
+
 def fila_listar(estado, limite=20):
     q = urllib.parse.quote(estado)
     return _sb("GET", f"ajf_fila?estado=eq.{q}&order=criado_em.asc&limit={limite}") or []
@@ -153,8 +163,8 @@ _ULTIMA = [0.0]
 
 
 def _ritmo():
-    """Free tier do Gemini tem poucos pedidos por minuto: espaça as chamadas (~12/min)."""
-    falta = 5 - (time.time() - _ULTIMA[0])
+    """Free tier do Gemini tem poucos pedidos por minuto: espaça as chamadas: 10 s por processo, robo1+robo2 em paralelo somam ~12/min."""
+    falta = 10 - (time.time() - _ULTIMA[0])
     if falta > 0:
         time.sleep(falta)
     _ULTIMA[0] = time.time()
