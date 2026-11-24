@@ -8,6 +8,17 @@ except ImportError:
     instaloader = None
 
 
+def totp(segredo, agora=None):
+    """Código de 6 dígitos (RFC 6238, SHA1, 30s) a partir da seed base32. Só stdlib."""
+    import base64, hmac, hashlib, struct, time
+    s = segredo.strip().replace(" ", "").upper()
+    chave = base64.b32decode(s + "=" * (-len(s) % 8))
+    n = int((agora or time.time()) // 30)
+    h = hmac.new(chave, struct.pack(">Q", n), hashlib.sha1).digest()
+    o = h[-1] & 15
+    return "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000)
+
+
 def logar():
     L = instaloader.Instaloader(quiet=True, download_pictures=False, download_videos=False, save_metadata=False,
                                 compress_json=False, max_connection_attempts=1, request_timeout=30)
@@ -22,7 +33,13 @@ def logar():
             return L
         except Exception as e:
             print("sessão salva não serviu, logando de novo:", e)
-    L.login(user, senha)
+    try:
+        L.login(user, senha)
+    except instaloader.exceptions.TwoFactorAuthRequiredException:
+        seed = os.environ.get("IG_TOTP_SECRET")
+        if not seed:
+            raise RuntimeError("Instagram pediu 2FA e falta o secret IG_TOTP_SECRET")
+        L.two_factor_login(totp(seed))
     L.save_session_to_file(sessao)
     return L
 
