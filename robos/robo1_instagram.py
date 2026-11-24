@@ -514,8 +514,20 @@ def _ler_apify(nome, chave):
     return out
 
 
+def _ler_socialtap(nome, chave):
+    d = _post_json("https://socialtap.dev/v1/instagram/posts?handle=" + urllib.parse.quote(nome), {"x-api-key": chave}, None, 60)
+    out = []
+    for n in d.get("data") or []:
+        m = (n.get("media") or [{}])[0]
+        video = (n.get("type") or m.get("type") or "") == "video"
+        out.append(dict(shortcode=n.get("id"), legenda=n.get("text") or "", quando=n.get("published_at") or "",
+                        video=video, midia=m.get("url") if video else (m.get("url") or n.get("thumbnail_url"))))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
-SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1)}
+SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
+            "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1)}
 
 
 def _main_posts(cfg):
@@ -536,13 +548,19 @@ def _main_posts(cfg):
         return 0
     # escolhe o serviço com mais cota mensal sobrando (em proporção), que tenha chave, não esteja em pausa e caiba no dia
     melhor, sobra = None, -1.0
+    reserva, sobra_r = None, -1.0  # reservas (crédito único/trial) só entram se nenhum serviço principal puder
     for nome, (env, _, custo) in SERVICOS.items():
         conf = sv.get("teto", {}).get(nome)
         if not conf or not os.environ.get(env):
             continue
+        if conf.get("valido_ate") and agora.strftime("%Y-%m-%d") > conf["valido_ate"]:
+            continue  # trial vencido: sai do rodízio sozinho
         u = uso.setdefault("s", {}).setdefault(nome, {})
         if u.get("mes") != mes:
-            u.update(mes=mes, usado=0)
+            u.update(mes=mes)
+            if not conf.get("credito_unico"):  # crédito único não renova: o uso acumulado nunca zera
+                u["usado"] = 0
+        u.setdefault("usado", 0)
         if u.get("dia") != dia:
             u.update(dia=dia, dia_usado=0)
         if time.time() < u.get("pausa_ate", 0):
@@ -550,8 +568,12 @@ def _main_posts(cfg):
         if u["usado"] + por_var * custo > conf["mes"] or u["dia_usado"] + por_var * custo > conf["dia"]:
             continue
         fr = 1 - u["usado"] / conf["mes"]
-        if fr > sobra:
+        if conf.get("reserva"):
+            if fr > sobra_r:
+                reserva, sobra_r = nome, fr
+        elif fr > sobra:
             melhor, sobra = nome, fr
+    melhor = melhor or reserva
     if not melhor:
         c.log_robo("robo1_instagram", True, "Instagram (serviços): nenhum serviço com cota disponível agora, sem gastar")
         return 0

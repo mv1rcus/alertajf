@@ -69,6 +69,12 @@
       "scrappa": {
         "mes": 450,
         "dia": 25
+      },
+      "socialtap": {
+        "mes": 100,
+        "dia": 25,
+        "reserva": true,
+        "credito_unico": true
       }
     },
     "stories": {
