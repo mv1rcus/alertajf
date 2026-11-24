@@ -806,7 +806,7 @@ def main_diag():
 
 
 def main():
-    if not c.esta_chovendo():
+    if not c.portao_aberto():
         c.log_robo("robo1_instagram", True, "sem chuva nem previsão, dormindo")
         return 0
     if instaloader is None:
