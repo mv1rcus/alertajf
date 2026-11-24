@@ -67,8 +67,8 @@
       "folhajf",
       "tribunademinas"
     ],
-    "perfis_por_varredura": 6,
-    "intervalo_min": 20,
+    "perfis_por_varredura": 9,
+    "intervalo_min": 15,
     "teto": {
       "scrappa": {
         "mes": 450,
