@@ -46,11 +46,11 @@ def main():
             lat, lon, bairro = geo
             midia = []
             if it.get("midia_path"):
-                midia = [{"path": it["midia_path"], "kind": "video", "credit": f'{it["autor"]} (Instagram)'[:120]}]
+                midia = [{"path": it["midia_path"], "kind": "image" if it["midia_path"].endswith(".jpg") else "video", "credit": f'{it["autor"]} (Instagram)'[:120]}]
             payload = {"street": a.get("rua") or bairro, "neighborhood": bairro, "kind": a["tipo"] if a["tipo"] != "enxurrada" else "alagamento",
                        "description": descricao(it, a), "lat": lat, "lng": lon, "observed_at": a["ocorrido_em"], "request_id": str(it["request_id"]), "media": midia}
             c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit", {"apikey": c.PUBLISHABLE_KEY, "Authorization": f"Bearer {token}"}, {"payload": payload})
-            if midia and not conferir_video(it["midia_path"]):
+            if midia and midia[0]["kind"] == "video" and not conferir_video(it["midia_path"]):
                 raise RuntimeError("publicado, mas o vídeo servido não é H.264/AAC")
             c.fila_atualizar(it["id"], estado="publicado", motivo=None)
             pub += 1

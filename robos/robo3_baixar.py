@@ -48,8 +48,24 @@ def main():
     ok_n = 0
     for it in itens:
         try:
-            if not it["eh_video"] or it["origem"] != "instagram":
-                c.fila_atualizar(it["id"], estado="baixado", midia_path=None)  # publica só com texto/foto
+            if it["origem"] != "instagram":
+                c.fila_atualizar(it["id"], estado="baixado", midia_path=None)
+                ok_n += 1
+                continue
+            if not it["eh_video"]:
+                # foto: baixa a miniatura agora (o link do Instagram expira), guarda no nosso Storage e serve do nosso domínio
+                path = None
+                if it.get("midia_url"):
+                    try:
+                        img = c.http("GET", it["midia_url"], raw=True, timeout=60)
+                        if 2000 < len(img) <= 6 * 1024 * 1024 and img[:3] == b"\xff\xd8\xff":
+                            path = f"r/{it['request_id']}-1.jpg"
+                            c.http("POST", f"{c.SUPABASE_URL}/storage/v1/object/relatos-midia/{path}",
+                                   {"apikey": c.SERVICE_KEY, "Authorization": f"Bearer {c.SERVICE_KEY}", "Content-Type": "image/jpeg", "x-upsert": "true"}, img, timeout=60)
+                    except Exception as e:
+                        print("foto não baixada, publica sem foto:", it["post_id"], e)
+                        path = None
+                c.fila_atualizar(it["id"], estado="baixado", midia_path=path)
                 ok_n += 1
                 continue
             with tempfile.TemporaryDirectory() as d:

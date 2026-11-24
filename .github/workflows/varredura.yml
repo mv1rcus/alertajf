@@ -22,6 +22,7 @@ env:
   FORCAR_VARREDURA: ${{ inputs.forcar && '1' || '0' }}
   IG_TOTP_SECRET: ${{ secrets.IG_TOTP_SECRET }}
   APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+  SCRAPPA_KEY: ${{ secrets.SCRAPPA_KEY }}
 defaults:
   run:
     working-directory: robos
