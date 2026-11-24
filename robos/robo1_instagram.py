@@ -525,9 +525,19 @@ def _ler_socialtap(nome, chave):
     return out
 
 
+def _ler_maviapi(nome, chave):
+    d = _post_json("https://api.maviapi.com/v1/sites/instagram/profiles/" + urllib.parse.quote(nome) + "/recent-posts", {"Authorization": "Bearer " + chave}, None, 60)
+    out = []
+    for n in ((d.get("data") or {}).get("posts")) or []:
+        video = (n.get("type") or "") == "video" or bool(n.get("video_url"))
+        out.append(dict(shortcode=n.get("shortcode"), legenda=n.get("caption") or "", quando=n.get("taken_at") or "",
+                        video=video, midia=n.get("video_url") if video else n.get("display_url")))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
-            "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1)}
+            "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1)}
 
 
 def _main_posts(cfg):
@@ -548,7 +558,7 @@ def _main_posts(cfg):
         return 0
     # escolhe o serviço com mais cota mensal sobrando (em proporção), que tenha chave, não esteja em pausa e caiba no dia
     melhor, sobra = None, -1.0
-    reserva, sobra_r = None, -1.0  # reservas (crédito único/trial) só entram se nenhum serviço principal puder
+    reserva, sobra_r = None, None  # reservas (crédito único/trial) só entram se nenhum serviço principal puder
     for nome, (env, _, custo) in SERVICOS.items():
         conf = sv.get("teto", {}).get(nome)
         if not conf or not os.environ.get(env):
@@ -569,8 +579,9 @@ def _main_posts(cfg):
             continue
         fr = 1 - u["usado"] / conf["mes"]
         if conf.get("reserva"):
-            if fr > sobra_r:
-                reserva, sobra_r = nome, fr
+            ch = (-conf.get("ordem", 9), fr)  # reservas: menor "ordem" primeiro, depois a que tem mais cota sobrando
+            if reserva is None or ch > sobra_r:
+                reserva, sobra_r = nome, ch
         elif fr > sobra:
             melhor, sobra = nome, fr
     melhor = melhor or reserva
