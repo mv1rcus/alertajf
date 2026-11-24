@@ -63,6 +63,26 @@ def ja_na_fila(item):
         return False
 
 
+def estado_ler(chave):
+    """Estado dos robôs guardado no banco (tabela ajf_estado). None se não existir ou der erro."""
+    try:
+        r = _sb("GET", "ajf_estado?select=valor&chave=eq." + urllib.parse.quote(chave))
+        return r[0]["valor"] if r else None
+    except Exception as e:
+        print("estado_ler falhou:", e)
+        return None
+
+
+def estado_gravar(chave, valor):
+    try:
+        _sb("POST", "ajf_estado?on_conflict=chave", {"chave": chave, "valor": valor, "atualizado_em": agora().isoformat()},
+            {"Prefer": "resolution=merge-duplicates,return=minimal"})
+        return True
+    except Exception as e:
+        print("estado_gravar falhou:", e)
+        return False
+
+
 def fila_listar(estado, limite=20, ordem="asc"):
     q = urllib.parse.quote(estado)
     return _sb("GET", f"ajf_fila?estado=eq.{q}&order=criado_em.{ordem}&limit={limite}") or []

@@ -472,6 +472,10 @@ SERV_USO = os.path.join(APP_DIR, "servicos_uso.json")
 
 
 def _uso():
+    """Contadores de cota: o banco manda (o cache do Actions zera quando o job falha); o arquivo é só reserva."""
+    v = c.estado_ler("robo1_uso")
+    if isinstance(v, dict) and v:
+        return v
     try:
         return json.load(open(SERV_USO))
     except Exception:
@@ -479,7 +483,9 @@ def _uso():
 
 
 def _salvar_uso(u):
+    os.makedirs(APP_DIR, exist_ok=True)
     json.dump(u, open(SERV_USO, "w"))
+    c.estado_gravar("robo1_uso", u)
 
 
 def _post_json(url, headers, body=None, timeout=150):
