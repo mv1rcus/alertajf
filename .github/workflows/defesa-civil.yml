@@ -13,29 +13,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      # Código (script) vem de main; os dados vivem na branch "dados",
+      # fora de main, para que cada atualização não vire deploy na Vercel.
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
-      - run: python3 scripts/defesa_civil.py
-      - name: Commit se mudou
+      - uses: actions/checkout@v4
+        with:
+          ref: dados
+          path: dados
+      - name: Coleta
         run: |
-          if [ -n "$(git status --porcelain public/defesa-civil.json)" ]; then
+          cp dados/defesa-civil.json public/defesa-civil.json
+          python3 scripts/defesa_civil.py
+      - name: Publica na branch dados (1 commit só, histórico não cresce)
+        run: |
+          if ! cmp -s public/defesa-civil.json dados/defesa-civil.json; then
+            cp public/defesa-civil.json dados/defesa-civil.json
+            cd dados
             git config user.name "mvthebest"
             git config user.email "68456420+mvthebest@users.noreply.github.com"
-            git add public/defesa-civil.json
+            git checkout --orphan nova
+            git add -A
             git commit -m "dados: alerta Defesa Civil JF"
-            # main pode receber um merge enquanto a coleta roda.
-            # Integra os commits remotos sem reescrever o histórico.
             for tentativa in 1 2 3; do
-              git pull --rebase origin main
-              if git push origin HEAD:main; then
-                exit 0
-              fi
-              if [ "$tentativa" = 3 ]; then
-                echo "Falha ao publicar após 3 tentativas; dados anteriores preservados."
-                exit 1
-              fi
+              if git push --force origin nova:dados; then exit 0; fi
               sleep 2
             done
+            echo "Falha ao publicar; dados anteriores preservados."
+            exit 1
           fi
