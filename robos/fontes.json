@@ -39,6 +39,14 @@
     [
       "G1 Zona da Mata",
       "https://g1.globo.com/rss/g1/mg/zona-da-mata/"
+    ],
+    [
+      "Folha JF",
+      "https://folhajf.com.br/feed/"
+    ],
+    [
+      "JF Diário",
+      "https://www.jfdiario.com.br/feed/"
     ]
   ],
   "instagram_ativo": true,
