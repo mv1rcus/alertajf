@@ -69,11 +69,13 @@
       "scrappa": {
         "mes": 450,
         "dia": 25
-      },
-      "apify": {
-        "mes": 1500,
-        "dia": 50
       }
+    },
+    "stories": {
+      "max_perfis": 8,
+      "intervalo_min": 30,
+      "teto_dia": 60,
+      "teto_mes": 800
     }
   }
 }
