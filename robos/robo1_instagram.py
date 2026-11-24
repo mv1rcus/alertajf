@@ -1,5 +1,5 @@
 """ROBÔ 1: varre os perfis de Instagram de JF, analisa com IA e enfileira o que é ocorrência real."""
-import json, os, sys, datetime as dt
+import json, os, sys, time, random, datetime as dt
 import common as c
 
 try:
@@ -47,6 +47,7 @@ def logar():
 def candidatos(L, perfis):
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     for nome in perfis:
+        time.sleep(random.uniform(2, 5))  # respiro entre perfis, pra o Instagram não estranhar
         try:
             p = instaloader.Profile.from_username(L.context, nome)
             for i, post in enumerate(p.get_posts()):

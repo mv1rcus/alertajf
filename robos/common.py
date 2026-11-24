@@ -83,7 +83,10 @@ def esta_chovendo():
         mm = [x or 0 for x in d["precipitation"]]
         passado, futuro = sum(mm[:4]), sum(mm[4:])
         print(f"chuva na última hora: {passado:.1f} mm | previsão próxima 1h: {futuro:.1f} mm")
-        return passado >= 0.3 or futuro >= 0.2
+        if passado >= 0.3:
+            return True  # chuva confirmada: varredura contínua (o disparo externo vem a cada 5 min)
+        # só previsão: mantém o ritmo calmo, um ciclo por quarto de hora
+        return futuro >= 0.2 and dt.datetime.now(dt.timezone.utc).minute % 15 < 5
     except Exception as e:
         print("portão de chuva falhou, seguindo por segurança:", e)
         return True
