@@ -161,6 +161,90 @@ def descobrir(L, itens):
     gravar_estado(e)
 
 
+# ---- Backend "app" (API móvel via instagrapi): o scraping web do instaloader leva "deslogado" em IP de servidor ----
+APP_DIR = os.path.join(c.AQUI, "..", ".ig-sessao")
+APP_SESSAO = os.path.join(APP_DIR, "app.json")
+APP_BLOQUEIO = os.path.join(APP_DIR, "bloqueio_app")  # guarda o epoch até quando não tentar de novo
+
+
+class FalhaApp(Exception):
+    pass
+
+
+def logar_app():
+    try:
+        import instagrapi  # noqa
+    except ImportError:  # o workflow só instala instaloader; instala aqui pra não precisar mexer no YAML
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "instagrapi"], check=True)
+    from instagrapi import Client
+    import instagrapi.exceptions as ex
+    os.makedirs(APP_DIR, exist_ok=True)
+    if os.path.exists(APP_BLOQUEIO):
+        try:
+            ate = float(open(APP_BLOQUEIO).read().strip())
+        except Exception:
+            ate = 0
+        if ate > time.time():
+            raise FalhaApp("em espera por falha anterior (%d min restantes)" % ((ate - time.time()) // 60 + 1))
+    user, senha, seed = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD"), os.environ.get("IG_TOTP_SECRET")
+    if not user or not senha:
+        raise FalhaApp("faltam IG_USERNAME/IG_PASSWORD")
+    cl = Client()
+    cl.delay_range = [2, 5]
+    cl.request_timeout = 30
+    if os.path.exists(APP_SESSAO):
+        try:
+            cl.load_settings(APP_SESSAO)
+            cl.get_timeline_feed()  # uma chamada leve pra ver se a sessão ainda vale
+            print("sessão do app reaproveitada")
+            return cl
+        except Exception as e:
+            print("sessão do app não serviu, logando de novo:", type(e).__name__)
+            cl = Client()
+            cl.delay_range = [2, 5]
+            cl.request_timeout = 30
+    try:
+        try:
+            cl.login(user, senha, verification_code=totp(seed) if seed else "")
+        except ex.TwoFactorRequired:
+            if not seed:
+                raise FalhaApp("pediu 2FA e falta IG_TOTP_SECRET")
+            cl.login(user, senha, verification_code=totp(seed))
+    except Exception as e:
+        # checkpoint, senha, feedback, rate limit: qualquer erro de login = espera 24h, sem insistir
+        open(APP_BLOQUEIO, "w").write(str(time.time() + 24 * 3600))
+        raise FalhaApp("login do app falhou (%s): %s" % (type(e).__name__, str(e)[:150]))
+    cl.dump_settings(APP_SESSAO)
+    return cl
+
+
+def candidatos_app(cl, perfis):
+    import instagrapi.exceptions as ex
+    limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
+    for nome in perfis:
+        time.sleep(random.uniform(2, 5))
+        try:
+            u = cl.user_info_by_username_v1(nome)
+            if u.is_private:
+                print(f"perfil {nome}: privado, pulando")
+                continue
+            for m in cl.user_medias_v1(int(u.pk), amount=12):
+                data = m.taken_at.astimezone(dt.timezone.utc) if m.taken_at.tzinfo else m.taken_at.replace(tzinfo=dt.timezone.utc)
+                if data < limite:
+                    continue
+                video = m.media_type == 2
+                yield dict(origem="instagram", post_id=m.code, autor=f"@{nome}",
+                           url=f"https://www.instagram.com/p/{m.code}/", legenda=m.caption_text or "",
+                           publicado_em=data.isoformat(), midia_url=str(m.video_url) if video and m.video_url else None,
+                           eh_video=bool(video))
+        except (ex.ChallengeRequired, ex.FeedbackRequired, ex.LoginRequired, ex.ChallengeError) as e:
+            open(APP_BLOQUEIO, "w").write(str(time.time() + 24 * 3600))
+            raise FalhaApp("Instagram barrou a conta no meio da leitura (%s)" % type(e).__name__)
+        except Exception as e:
+            print(f"perfil {nome}: {type(e).__name__}: {str(e)[:120]}")
+
+
 def main():
     if not c.esta_chovendo():
         c.log_robo("robo1_instagram", True, "sem chuva nem previsão, dormindo")
@@ -172,6 +256,8 @@ def main():
         c.log_robo("robo1_instagram", True, "pausado (instagram_ativo=false em fontes.json): login recusado, sem insistir")
         return 0
     perfis = list(cfg["instagram"])
+    if cfg.get("instagram_backend", "app") == "app":
+        return main_app(cfg, perfis)
     perfis += [n for n in ler_estado().get("extras", []) if n not in perfis]
     try:
         L = logar()
@@ -209,6 +295,37 @@ def main():
     except Exception as ex:
         print("descoberta:", ex)
     c.log_robo("robo1_instagram", True, f"{novos} novos candidatos, {analisados} aprovados pela IA")
+    return 0
+
+
+
+def main_app(cfg, perfis):
+    try:
+        cl = logar_app()
+    except FalhaApp as e:
+        c.log_robo("robo1_instagram", False, f"Instagram (app): {e}")
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(str(e)[:300])
+        return 0
+    novos = analisados = lidos = 0
+    try:
+        for it in candidatos_app(cl, perfis):
+            lidos += 1
+            try:
+                if not it["legenda"].strip() and not it["eh_video"]:
+                    continue
+                a = c.analisar(it)
+                ok, motivo = c.validar_analise(a)
+                it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
+                if c.fila_inserir(it):
+                    novos += 1
+                    analisados += ok
+            except Exception as e:
+                print("candidato falhou:", it.get("post_id"), e)
+    except FalhaApp as e:
+        c.log_robo("robo1_instagram", False, f"Instagram (app): {e}")
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(str(e)[:300])
+        return 0
+    c.log_robo("robo1_instagram", True, f"app: {lidos} posts recentes lidos, {novos} novos candidatos, {analisados} aprovados pela IA")
     return 0
 
 
