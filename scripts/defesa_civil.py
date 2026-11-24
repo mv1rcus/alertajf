@@ -38,13 +38,38 @@ def poligonos(area):
             continue
 
 
+def _poligono_jf():
+    """Polígono do município (pares lat, lon), o mesmo de src/lib/raios.ts."""
+    arq = os.path.join(os.path.dirname(__file__), "..", "robos", "jf_poligono.json")
+    return [(la, lo) for lo, la in json.load(open(arq))["pontos"]]
+
+
+def _cruzam(p1, p2, p3, p4):
+    def o(a, b, c):
+        return (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1])
+    return (o(p1, p2, p3) > 0) != (o(p1, p2, p4) > 0) and (o(p3, p4, p1) > 0) != (o(p3, p4, p2) > 0)
+
+
+def poligonos_se_tocam(a, b):
+    """True se dois polígonos (lat, lon) se tocam: algum vértice de um dentro do outro, ou arestas que se cruzam."""
+    if any(ponto_em_poligono(la, lo, b) for la, lo in a) or any(ponto_em_poligono(la, lo, a) for la, lo in b):
+        return True
+    for i in range(len(a)):
+        for j in range(len(b)):
+            if _cruzam(a[i], a[(i + 1) % len(a)], b[j], b[(j + 1) % len(b)]):
+                return True
+    return False
+
+
 def vale_para_jf(info):
+    jf = _poligono_jf()
     for area in info.findall(CAP + "area"):
         for g in area.findall(CAP + "geocode"):
             if (g.findtext(CAP + "value") or "").strip() == GEOCODE_JF:
                 return True
         for pts in poligonos(area):
-            if len(pts) >= 3 and ponto_em_poligono(JF[0], JF[1], pts):
+            # alerta cobrindo só parte do município também vale: basta o polígono tocar o município
+            if len(pts) >= 3 and (ponto_em_poligono(JF[0], JF[1], pts) or poligonos_se_tocam(pts, jf)):
                 return True
     return False
 
