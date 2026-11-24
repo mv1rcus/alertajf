@@ -83,7 +83,11 @@ def main():
         return 0
     if instaloader is None:
         raise RuntimeError("instaloader não instalado")
-    perfis = json.load(open(os.path.join(c.AQUI, "fontes.json")))["instagram"]
+    cfg = json.load(open(os.path.join(c.AQUI, "fontes.json")))
+    if not cfg.get("instagram_ativo", True):
+        c.log_robo("robo1_instagram", True, "pausado (instagram_ativo=false em fontes.json): login recusado, sem insistir")
+        return 0
+    perfis = cfg["instagram"]
     try:
         L = logar()
     except Exception as e:
