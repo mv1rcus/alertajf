@@ -20,6 +20,7 @@ env:
   SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   FORCAR_VARREDURA: ${{ inputs.forcar && '1' || '0' }}
+  IG_TOTP_SECRET: ${{ secrets.IG_TOTP_SECRET }}
 defaults:
   run:
     working-directory: robos
