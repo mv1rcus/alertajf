@@ -218,3 +218,14 @@
 .radar-legend-items li span{display:flex;flex-direction:column}
 .radar-legend-items li small{font-size:11px;opacity:.7}
 .radar-legend-note{margin:0;font-size:11.5px;line-height:1.35;opacity:.65}
+@media (max-width:640px){
+.radar-legend{margin:6px 0;padding:8px 10px;border-radius:12px;gap:6px}
+.radar-legend-head span{display:none}
+.radar-legend-head b{font-size:13px}
+.radar-legend-bar{height:6px}
+.radar-legend-items{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.radar-legend-items li{gap:5px;padding:3px 6px;border-radius:8px;font-size:11.5px}
+.radar-legend-items li>i{width:9px;height:9px;box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+.radar-legend-items li small{display:none}
+.radar-legend-note{font-size:10.5px;line-height:1.3}
+}
