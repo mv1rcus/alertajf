@@ -1,5 +1,5 @@
 """ROBÔ 3: baixa o vídeo/foto dos itens aprovados e converte tudo para H.264/AAC mp4 (toca em iPhone, Android e desktop)."""
-import datetime as dt, json, os, subprocess, sys, tempfile
+import datetime as dt, json, os, re, subprocess, sys, tempfile
 import common as c
 
 TETO = 7 * 1024 * 1024  # mesmo teto de vídeo do formulário do site
@@ -68,11 +68,42 @@ def main():
     if not itens:
         c.log_robo("robo3_baixar", True, "nada na fila para baixar")
         return 0
-    if any(i["origem"] == "instagram" and i["eh_video"] for i in itens):
+    if any((i["origem"] == "instagram" and i["eh_video"]) or (i["origem"] == "noticias" and i.get("midia_url")) for i in itens):
         garantir_ffmpeg()
     ok_n = 0
     for it in itens:
         try:
+            if it["origem"] == "noticias" and it.get("midia_url"):
+                # notícia de RSS local: baixa a imagem da matéria, converte para JPEG (ffmpeg) e serve do nosso Storage
+                path = None
+                try:
+                    url_img = it["midia_url"]
+                    img = b""
+                    grande = re.sub(r"-\d+x\d+(\.\w+)(\?.*)?$", r"\1", url_img)  # WordPress serve miniatura 150x150; o arquivo original não tem o sufixo
+                    for cand in ([grande, url_img] if grande != url_img else [url_img]):
+                        try:
+                            img = c.http("GET", cand, raw=True, timeout=60)
+                            if len(img) > 2000:
+                                break
+                        except Exception:
+                            img = b""
+                    if len(img) > 2000:
+                        with tempfile.TemporaryDirectory() as d:
+                            a, b = os.path.join(d, "in"), os.path.join(d, "out.jpg")
+                            open(a, "wb").write(img)
+                            r = sh(["ffmpeg", "-y", "-loglevel", "error", "-i", a, "-vf", "scale='min(1280,iw)':-2", "-q:v", "4", "-frames:v", "1", b])
+                            if r.returncode == 0 and 2000 < os.path.getsize(b) <= 6 * 1024 * 1024:
+                                jpg = open(b, "rb").read()
+                                if jpg[:3] == b"\xff\xd8\xff":
+                                    path = f"r/{it['request_id']}-1.jpg"
+                                    c.http("POST", f"{c.SUPABASE_URL}/storage/v1/object/relatos-midia/{path}",
+                                           {"apikey": c.SERVICE_KEY, "Authorization": f"Bearer {c.SERVICE_KEY}", "Content-Type": "image/jpeg", "x-upsert": "true"}, jpg, timeout=60)
+                except Exception as e:
+                    print("imagem da notícia não baixada, publica sem imagem:", it["post_id"], e)
+                    path = None
+                c.fila_atualizar(it["id"], estado="baixado", midia_path=path)
+                ok_n += 1
+                continue
             if it["origem"] != "instagram":
                 c.fila_atualizar(it["id"], estado="baixado", midia_path=None)
                 ok_n += 1

@@ -164,7 +164,8 @@ REGRAS (todas obrigatórias, na dúvida valido=false):
 2. Precisa ter local identificável: rua OU bairro de Juiz de Fora citado no texto. Não invente local.
 3. Descarte (valido=false): foto/vídeo genérico de céu ou chuva caindo; imagem de alerta, aviso da Defesa Civil, previsão ou gráfico; notícia de outra cidade; balanço geral sem local específico; post de dias anteriores (temporal passado), mesmo que o perfil tenha postado agora.
 4. ocorrido_em: horário do fato segundo o texto (ex.: "hoje às 18h", "agora há pouco"), em UTC. Use o horário de publicação se o texto indicar que é agora. Se não der para saber, deixe vazio e valido=false.
-5. Timezone do texto: Brasília (UTC-3)."""
+5. Timezone do texto: Brasília (UTC-3).
+6. NOTÍCIA (origem notícias): a data do feed NÃO é o horário do fato (o Google Notícias reindexa matéria velha). Hoje é {hoje_br}. Só vale se o próprio texto mostrar que o fato é de AGORA: "agora", "neste momento", "há pouco", "nesta tarde/hoje" com data de hoje. Se falar em "ontem", "noite de segunda", "segunda-feira (23)", data anterior, balanço do temporal passado, ou se não der para saber o dia do fato, valido=false. Quando a linha "Data real da matéria" existir, ela manda: ocorrido_em nunca pode ser depois dela."""
 
 
 _RUINS = set()
@@ -202,7 +203,9 @@ def analisar(item):
     """Roda a IA sobre um candidato. Devolve dict de análise (com campo 'valido')."""
     if not GEMINI_KEY:
         raise RuntimeError("Falta o secret GEMINI_API_KEY")
-    prompt = PROMPT_ANALISE.format(agora=agora().isoformat(timespec="minutes"), autor=item.get("autor", ""),
+    dias = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
+    br = agora().astimezone(dt.timezone(dt.timedelta(hours=-3)))
+    prompt = PROMPT_ANALISE.format(hoje_br=f"{dias[br.weekday()]}, {br.strftime('%d/%m/%Y %H:%M')} (Brasília)", agora=agora().isoformat(timespec="minutes"), autor=item.get("autor", ""),
                                    publicado=item.get("publicado_em") or "desconhecido", legenda=(item.get("legenda") or "")[:3000])
     corpo = {"contents": [{"parts": [{"text": prompt}]}],
              "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
