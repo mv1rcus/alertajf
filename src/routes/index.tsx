@@ -280,6 +280,7 @@ html{scroll-behavior:smooth}.ajf .dark-base{filter:invert(1) hue-rotate(180deg) 
 .ajf .env-card{position:relative;display:flex;flex-direction:column;gap:2px;padding:10px 12px;min-width:0}
 .ajf .env-card>*{margin:0}
 .ajf .env-card>.eyebrow{font-size:9px;letter-spacing:1.2px;line-height:1.3;padding-right:26px}
+.ajf .env-card>h3,.ajf .env-card>.mm-src{padding-right:34px}
 .ajf .env-card>h3,.ajf .env-card>p:not(.mm-line){display:none}.ajf .env-card>p.mm-line{display:block;margin:4px 0 0;font-size:11px}.ajf .env-card>p.mm-line b{font-size:15px}
 .ajf .env-card>.big-number{font-size:18px;line-height:1.25;letter-spacing:-.4px;margin-top:2px}
 .ajf .env-card>small{font-size:10px;line-height:1.35}
