@@ -126,6 +126,17 @@ def _modelo():
     return _MODELO
 
 
+_ULTIMA = [0.0]
+
+
+def _ritmo():
+    """Free tier do Gemini tem poucos pedidos por minuto: espaça as chamadas (~12/min)."""
+    falta = 5 - (time.time() - _ULTIMA[0])
+    if falta > 0:
+        time.sleep(falta)
+    _ULTIMA[0] = time.time()
+
+
 def analisar(item):
     """Roda a IA sobre um candidato. Devolve dict de análise (com campo 'valido')."""
     if not GEMINI_KEY:
@@ -134,8 +145,9 @@ def analisar(item):
                                    publicado=item.get("publicado_em") or "desconhecido", legenda=(item.get("legenda") or "")[:3000])
     corpo = {"contents": [{"parts": [{"text": prompt}]}],
              "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
-    for tentativa in range(8):
+    for tentativa in range(6):
         try:
+            _ritmo()
             d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_modelo()}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
             txt = d["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(txt)
@@ -145,7 +157,7 @@ def analisar(item):
                 print(f"modelo {_modelo()} indisponível; tentando outro")
                 continue
             if "HTTP 429" in str(e) or "HTTP 503" in str(e):
-                time.sleep(15 * (tentativa + 1))
+                time.sleep(10 * (tentativa + 1))
                 continue
             raise
     raise RuntimeError("Gemini indisponível/limite (429) após 4 tentativas")
