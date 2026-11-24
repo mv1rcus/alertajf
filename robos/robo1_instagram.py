@@ -34,8 +34,10 @@ def logar():
     if os.path.exists(sessao):
         try:
             L.load_session_from_file(user, sessao)
-            L.test_login()
-            return L
+            if L.test_login():  # test_login devolve None (não levanta erro) quando a sessão caiu
+                return L
+            print("sessão salva não está mais logada, logando de novo")
+            os.remove(sessao)
         except Exception as e:
             print("sessão salva não serviu, logando de novo:", e)
     # Login completo é raro: no máximo 1 tentativa por hora (depois de falhar, espera, sem martelar).
@@ -63,6 +65,9 @@ def logar():
     return L
 
 
+ERROS_LOGIN = []
+
+
 def candidatos(L, perfis):
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     for nome in perfis:
@@ -82,6 +87,8 @@ def candidatos(L, perfis):
             raise
         except Exception as e:
             print(f"perfil {nome}: {e}")
+            if "logged out" in str(e) or "login" in str(e).lower():
+                ERROS_LOGIN.append(nome)
     try:  # stories (alguns jornalistas postam só ali)
         ids = [instaloader.Profile.from_username(L.context, n).userid for n in perfis[:6]]
         for st in L.get_stories(ids):
@@ -187,6 +194,16 @@ def main():
                 analisados += ok
         except Exception as e:
             print("candidato falhou:", it.get("post_id"), e)
+    if perfis and len(ERROS_LOGIN) >= len(perfis):  # nenhum perfil leu: sessão sem permissão de leitura
+        try:
+            os.remove(os.path.join(c.AQUI, "..", ".ig-sessao", "sessao"))
+            open(os.path.join(c.AQUI, "..", ".ig-sessao", "bloqueio"), "w").write(str(time.time()))
+        except Exception:
+            pass
+        msg = "Instagram recusou a leitura de todos os %d perfis (sessão deslogada)" % len(perfis)
+        c.log_robo("robo1_instagram", False, msg)
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(msg)
+        return 0
     try:
         descobrir(L, vistos)
     except Exception as ex:
