@@ -11,12 +11,16 @@ export type AlertaDC = {
 };
 
 /** Arquivo atualizado a cada ~10 min pelo workflow "Alertas da Defesa Civil (JF)" (feed IDAP/MIDR). */
-export const URL_DEFESA_CIVIL = "/defesa-civil.json";
+/** Dados ficam na branch "dados" (fora de main) para não gastar deploys da Vercel; cai pro arquivo local se o GitHub falhar. */
+export const URL_DEFESA_CIVIL = "https://raw.githubusercontent.com/mvthebest/alertajf/dados/defesa-civil.json";
+export const URL_DEFESA_CIVIL_RESERVA = "/defesa-civil.json";
 
 export type RespostaDC = { alerta: AlertaDC | null; fonteAtualizada: string | null };
 
 export async function buscarAlertaDC(): Promise<RespostaDC> {
-  const r = await fetch(`${URL_DEFESA_CIVIL}?t=${Math.floor(Date.now() / 60000)}`, { signal: AbortSignal.timeout(15000), cache: "no-store" });
+  const pedir = (u: string) => fetch(`${u}?t=${Math.floor(Date.now() / 60000)}`, { signal: AbortSignal.timeout(15000), cache: "no-store" });
+  let r = await pedir(URL_DEFESA_CIVIL).catch(() => null);
+  if (!r || !r.ok) r = await pedir(URL_DEFESA_CIVIL_RESERVA);
   if (!r.ok) throw new Error(`Defesa Civil ${r.status}`);
   const d = (await r.json()) as { alertas?: AlertaDC[]; fonte_atualizada_em?: string };
   if (!Array.isArray(d.alertas)) throw new Error("Resposta inválida");
