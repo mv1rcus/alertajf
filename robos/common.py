@@ -157,11 +157,11 @@ Texto do post: ---
 {legenda}
 ---
 Responda SÓ com JSON no formato:
-{{"valido": bool, "motivo": "curto", "tipo": "alagamento|deslizamento|enxurrada|interdicao|sem_luz|nenhum", "rua": "", "bairro": "", "ocorrido_em": "ISO-8601 UTC ou vazio", "descricao": "1-2 frases em português, só fatos do texto", "confianca": 0.0}}
+{{"valido": bool, "motivo": "curto", "tipo": "alagamento|deslizamento|enxurrada|interdicao|sem_luz|nenhum", "rua": "", "bairro": "", "referencia": "", "ocorrido_em": "ISO-8601 UTC ou vazio", "descricao": "1-2 frases em português, só fatos do texto", "confianca": 0.0}}
 
 REGRAS (todas obrigatórias, na dúvida valido=false):
 1. Só vale OCORRÊNCIA REAL da chuva ATUAL, em Juiz de Fora (MG): alagamento, deslizamento/queda de barranco, enxurrada, via interditada, queda de energia por chuva.
-2. Precisa ter local identificável: rua OU bairro de Juiz de Fora citado no texto. Não invente local.
+2. Precisa ter local identificável: rua OU bairro de Juiz de Fora citado no texto. Não invente local. Em "referencia" ponha o ponto de referência citado junto (ponte, cruzamento, número, prédio, praça) ou vazio; se o texto citar bairro, preencha "bairro". Rua sem bairro nem referência é aceita, mas o pin sai marcado como trecho aproximado.
 3. Descarte (valido=false): foto/vídeo genérico de céu ou chuva caindo; imagem de alerta, aviso da Defesa Civil, previsão ou gráfico; notícia de outra cidade; balanço geral sem local específico; post de dias anteriores (temporal passado), mesmo que o perfil tenha postado agora.
 4. ocorrido_em: horário do fato segundo o texto (ex.: "hoje às 18h", "agora há pouco"), em UTC. Use o horário de publicação se o texto indicar que é agora. Se não der para saber, deixe vazio e valido=false.
 5. Timezone do texto: Brasília (UTC-3).
@@ -287,23 +287,42 @@ def ponto_em_jf(lat, lon):
     return dentro
 
 
-def geocodificar(rua, bairro):
-    """(lat, lon, bairro_final) ou None. Nominatim restrito a JF; cai no centro do bairro."""
+def _nominatim(q, limit=1):
+    u = ("https://nominatim.openstreetmap.org/search?format=json&limit=%d&countrycodes=br" % limit
+         + f"&viewbox={JF_BBOX[2]},{JF_BBOX[1]},{JF_BBOX[3]},{JF_BBOX[0]}&bounded=1&q=" + urllib.parse.quote(q))
+    time.sleep(1.1)  # política de uso: 1 requisição por segundo
+    r = http("GET", u) or []
+    return [(float(x["lat"]), float(x["lon"])) for x in r if ponto_em_jf(float(x["lat"]), float(x["lon"]))]
+
+
+def geocodificar_info(rua, bairro, referencia=""):
+    """{lat, lon, bairro, aproximado} ou None. Prioriza ponto de referência/bairro citado; rua sem nada disso
+    é a rua certa com trecho incerto (aproximado=True), nunca um ponto exato inventado."""
     b_norm = _norm(bairro or "")
     centro = next((b for b in _bairros() if _norm(b["nome"]) == b_norm), None)
+    nome_b = centro["nome"] if centro else (bairro or "Juiz de Fora")
+    consultas = []
+    if rua and referencia:
+        consultas.append(([rua, referencia, bairro], False))
+    if referencia and not rua:
+        consultas.append(([referencia, bairro], False))
     if rua:
-        q = ", ".join(x for x in [rua, bairro, "Juiz de Fora", "MG", "Brasil"] if x)
-        u = ("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br"
-             f"&viewbox={JF_BBOX[2]},{JF_BBOX[1]},{JF_BBOX[3]},{JF_BBOX[0]}&bounded=1&q=" + urllib.parse.quote(q))
+        consultas.append(([rua, bairro], not bairro))  # sem bairro nem referência: trecho incerto
+    for partes, aprox in consultas:
+        q = ", ".join(x for x in partes + ["Juiz de Fora", "MG", "Brasil"] if x)
         try:
-            time.sleep(1.1)  # política de uso: 1 requisição por segundo
-            r = http("GET", u)
-            if r:
-                la, lo = float(r[0]["lat"]), float(r[0]["lon"])
-                if ponto_em_jf(la, lo):
-                    return la, lo, (centro["nome"] if centro else (bairro or "Juiz de Fora"))
+            pts = _nominatim(q)
         except Exception as e:
             print("nominatim falhou:", e)
+            continue
+        if pts:
+            return {"lat": pts[0][0], "lon": pts[0][1], "bairro": nome_b, "aproximado": aprox}
     if centro:
-        return centro["lat"], centro["lon"], centro["nome"]
+        return {"lat": centro["lat"], "lon": centro["lon"], "bairro": centro["nome"], "aproximado": True}
     return None
+
+
+def geocodificar(rua, bairro, referencia=""):
+    """(lat, lon, bairro_final) ou None (compatível com os chamadores antigos)."""
+    g = geocodificar_info(rua, bairro, referencia)
+    return (g["lat"], g["lon"], g["bairro"]) if g else None

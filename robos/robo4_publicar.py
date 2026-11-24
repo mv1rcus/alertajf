@@ -18,7 +18,8 @@ def limpar(txt):
 
 def descricao(it, a):
     fonte = limpar(it["autor"]) + (" (Instagram)" if it["origem"] == "instagram" else "")
-    return limpar(f'{limpar(a["descricao"]).strip()} Fonte: {fonte}. Post original: {it["url"]} {AVISO}')[:900]
+    aprox = " Local aproximado: rua certa, trecho exato incerto." if a.get("_aproximado") else ""
+    return limpar(f'{limpar(a["descricao"]).strip()}{aprox} Fonte: {fonte}. Post original: {it["url"]} {AVISO}')[:900]
 
 
 def conferir_video(path):
@@ -101,7 +102,9 @@ def main():
                 c.fila_atualizar(it["id"], estado="descartado", motivo=motivo)
                 desc += 1
                 continue
-            geo = c.geocodificar(a.get("rua", ""), a.get("bairro", ""))
+            info = c.geocodificar_info(a.get("rua", ""), a.get("bairro", ""), a.get("referencia", ""))
+            geo = (info["lat"], info["lon"], info["bairro"]) if info else None
+            a["_aproximado"] = bool(info and info["aproximado"])
             if not geo:
                 print("descartado:", it["post_id"], "local não encontrado em JF", a.get("rua"), a.get("bairro"))
                 c.fila_atualizar(it["id"], estado="descartado", motivo="local não encontrado em JF")
