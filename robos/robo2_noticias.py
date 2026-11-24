@@ -20,6 +20,7 @@ def main():
     buscas = json.load(open(os.path.join(c.AQUI, "fontes.json")))["noticias_buscas"]
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     vistos, novos, aprov = set(), 0, 0
+    fim = c.agora() + dt.timedelta(minutes=9)  # orçamento de tempo do robô
     for b in buscas:
         try:
             itens = list(feed(b))
@@ -27,6 +28,8 @@ def main():
             print("feed falhou:", b, e)
             continue
         for n in itens:
+            if c.agora() > fim:
+                break
             if n["link"] in vistos:
                 continue
             vistos.add(n["link"])
