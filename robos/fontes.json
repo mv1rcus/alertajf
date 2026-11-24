@@ -95,6 +95,11 @@
         "credito_unico": true,
         "ordem": 3
       },
+      "embed": {
+        "mes": 100000,
+        "dia": 3000,
+        "principal": true
+      },
       "herascrape": {
         "mes": 2400,
         "dia": 25,

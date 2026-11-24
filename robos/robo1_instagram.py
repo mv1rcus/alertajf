@@ -1,5 +1,5 @@
 """ROBÔ 1: varre os perfis de Instagram de JF, analisa com IA e enfileira o que é ocorrência real."""
-import json, os, sys, time, random, datetime as dt, urllib.request, urllib.error, urllib.parse
+import json, re, os, sys, time, random, datetime as dt, urllib.request, urllib.error, urllib.parse
 import common as c
 
 try:
@@ -599,11 +599,61 @@ def _ler_herascrape(nome, chave):
     return out
 
 
+def _http_texto(url, timeout=30):
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",  # UA simples: com UA de navegador completo o Instagram devolve outra página, sem o video_url
+                                               "Accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read().decode("utf-8", "replace")
+
+
+def _desescapar(v):
+    return v.replace("\\\\/", "/").replace("\\/", "/").replace("\\\\u0026", "&").replace("\\u0026", "&").rstrip("\\")
+
+
+def _video_do_embed(codigo):
+    """Link do mp4 de um post: a página pública /p/<código>/embed/captioned/ traz o video_url (sem login)."""
+    t = _http_texto("https://www.instagram.com/p/%s/embed/captioned/" % codigo, 30)
+    m = re.search(r'video_url\\*":\\*"(https?:.*?)\\*"', t)
+    return _desescapar(m.group(1)) if m else None
+
+
+def _ler_embed(nome, chave):
+    """Leitor PRÓPRIO, sem login e sem serviço de terceiros: a página pública de embed do perfil
+    (instagram.com/<perfil>/embed/) traz as 6 postagens mais recentes (legenda, hora, foto). Vídeo: página de embed do post.
+    Grátis e sem cota; se o Instagram bloquear o IP (401/403/429) o serviço entra em pausa e os de terceiros assumem."""
+    t = _http_texto("https://www.instagram.com/%s/embed/" % urllib.parse.quote(nome), 30)
+    m = re.search(r'"contextJSON":"((?:[^"\\]|\\.)*)"', t)
+    if not m:
+        raise RuntimeError("embed sem contextJSON (muro de login ou formato novo)")
+    ctx = json.loads(json.loads('"' + m.group(1) + '"')).get("context") or {}
+    limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
+    out = []
+    for g in ctx.get("graphql_media") or []:
+        n = g.get("shortcode_media") or {}
+        cod = n.get("shortcode")
+        if not cod or not n.get("taken_at_timestamp"):
+            continue
+        quando = dt.datetime.fromtimestamp(n["taken_at_timestamp"], dt.timezone.utc)
+        legenda = (((n.get("edge_media_to_caption") or {}).get("edges") or [{}])[0].get("node") or {}).get("text") or ""
+        video = bool(n.get("is_video"))
+        midia = n.get("display_url")
+        if video and quando >= limite and not c.ja_na_fila(dict(origem="instagram", post_id=str(cod))):
+            try:
+                midia = _video_do_embed(cod) or midia
+                time.sleep(random.uniform(1, 2))
+            except Exception as e:
+                print("embed video falhou:", cod, type(e).__name__)
+        out.append(dict(shortcode=cod, legenda=legenda, quando=quando.isoformat(), video=video, midia=midia))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
             "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1),
             "creatorcrawl": ("CREATORCRAWL_KEY", _ler_creatorcrawl, 1),
-            "herascrape": ("HERASCRAPE_KEY", _ler_herascrape, 1)}
+            "herascrape": ("HERASCRAPE_KEY", _ler_herascrape, 1),
+            "embed": (None, _ler_embed, 1)}
 
 
 def _main_posts(cfg):
@@ -624,10 +674,11 @@ def _main_posts(cfg):
         return 0
     # escolhe o serviço com mais cota mensal sobrando (em proporção), que tenha chave, não esteja em pausa e caiba no dia
     melhor, sobra = None, -1.0
+    principal = None
     reserva, sobra_r = None, None  # reservas (crédito único/trial) só entram se nenhum serviço principal puder
     for nome, (env, _, custo) in SERVICOS.items():
         conf = sv.get("teto", {}).get(nome)
-        if not conf or not os.environ.get(env):
+        if not conf or (env and not os.environ.get(env)):
             continue
         if conf.get("valido_ate") and agora.strftime("%Y-%m-%d") > conf["valido_ate"]:
             continue  # trial vencido: sai do rodízio sozinho
@@ -643,6 +694,9 @@ def _main_posts(cfg):
             continue
         if u["usado"] + por_var * custo > conf["mes"] or u["dia_usado"] + por_var * custo > conf["dia"]:
             continue
+        if conf.get("principal"):
+            principal = principal or nome  # leitor próprio: vai primeiro quando não está em pausa
+            continue
         fr = 1 - u["usado"] / conf["mes"]
         if conf.get("reserva"):
             ch = (-conf.get("ordem", 9), fr)  # reservas: menor "ordem" primeiro, depois a que tem mais cota sobrando
@@ -650,7 +704,7 @@ def _main_posts(cfg):
                 reserva, sobra_r = nome, ch
         elif fr > sobra:
             melhor, sobra = nome, fr
-    melhor = melhor or reserva
+    melhor = principal or melhor or reserva
     if not melhor:
         c.log_robo("robo1_instagram", True, "Instagram (serviços): nenhum serviço com cota disponível agora, sem gastar")
         return 0
@@ -665,11 +719,11 @@ def _main_posts(cfg):
     novos = analisados = lidos = lidos_perfis = falhas = brutos = parseados = 0
     for nome in escolha:
         try:
-            posts = leitor(nome, os.environ[env])
+            posts = leitor(nome, os.environ.get(env) if env else None)
         except urllib.error.HTTPError as e:
             falhas += 1
             if e.code in (401, 402, 403, 429):  # chave/cota/limite: pausa o serviço e para
-                u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
+                u["pausa_ate"] = time.time() + (24 if (e.code != 429 and melhor != "embed") else 1) * 3600
                 c.log_robo("robo1_instagram", False, "Instagram (%s): HTTP %s, serviço em pausa" % (melhor, e.code))
                 open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write("%s HTTP %s" % (melhor, e.code))
                 break
@@ -713,6 +767,12 @@ def _main_posts(cfg):
     elif brutos:
         print("%s: %d posts lidos, %d parseados" % (melhor, brutos, parseados))
     msg = "%s: %d/%d perfis lidos, %d posts recentes, %d novos, %d aprovados pela IA (uso do mês %d/%d)" % (melhor, lidos_perfis, len(escolha), lidos, novos, analisados, u["usado"], cfgt["mes"])
+    if escolha and lidos_perfis == 0 and melhor == "embed":  # leitor próprio falhou em tudo: pausa 1h, os de terceiros assumem
+        u["pausa_ate"] = time.time() + 3600
+        uso["ultimo"] = 0  # a próxima varredura já usa o próximo serviço
+        _salvar_uso(uso)
+        c.log_robo("robo1_instagram", False, "Instagram (embed próprio falhou em todos os perfis, pausa de 1h; terceiros assumem)")
+        return 0
     if escolha and lidos_perfis == 0:
         c.log_robo("robo1_instagram", False, "Instagram (" + msg + ")")
         open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write("nenhum perfil lido via " + melhor)
