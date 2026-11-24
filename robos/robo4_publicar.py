@@ -25,6 +25,31 @@ def conferir_video(path):
         return s.get("video") == "h264" and s.get("audio", "aac") == "aac"
 
 
+def _metros(la1, lo1, la2, lo2):
+    import math
+    r = 6371000
+    p1, p2 = math.radians(la1), math.radians(la2)
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lo2 - lo1) / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+RAIO_DUPLICADO_M = 250  # mesmo tipo a até 250 m = mesmo fato (cada execução usa um usuário anônimo novo, o site não pega isso)
+
+
+def duplicado(no_ar, rua, bairro, tipo, lat, lon):
+    for r in no_ar:
+        if r.get("kind") != tipo:
+            continue
+        if (r.get("street") or "").lower() == rua.lower() and (r.get("neighborhood") or "").lower() == bairro.lower():
+            return True
+        try:
+            if _metros(lat, lon, float(r["lat"]), float(r["lng"])) <= RAIO_DUPLICADO_M:
+                return True
+        except (KeyError, TypeError, ValueError):
+            pass
+    return False
+
+
 def publicados_agora():
     d = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_reports", {"apikey": c.PUBLISHABLE_KEY}, {})
     return d if isinstance(d, list) else []
@@ -75,7 +100,7 @@ def main():
             lat, lon, bairro = geo
             tipo = a["tipo"] if a["tipo"] != "enxurrada" else "alagamento"
             rua = a.get("rua") or bairro
-            if any((r.get("street") or "").lower() == rua.lower() and (r.get("neighborhood") or "").lower() == bairro.lower() and r.get("kind") == tipo for r in no_ar):
+            if duplicado(no_ar, rua, bairro, tipo, lat, lon):
                 print("descartado:", it["post_id"], "já há pin igual no ar")
                 c.fila_atualizar(it["id"], estado="descartado", motivo="já há pin igual no ar")
                 desc += 1
@@ -94,6 +119,7 @@ def main():
             c.fila_atualizar(it["id"], estado="publicado", motivo=f"id={rid}")  # marca na hora: nunca republica o mesmo item
             if not any(r.get("id") == rid for r in publicados_agora()):
                 raise RuntimeError(f"enviado (id={rid}) mas não apareceu na lista pública")
+            no_ar.append({"id": rid, "kind": tipo, "street": rua, "neighborhood": bairro, "lat": lat, "lng": lon})
             print("publicado:", it["post_id"], "id", rid)
             pub += 1
         except Exception as e:
