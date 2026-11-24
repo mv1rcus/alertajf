@@ -1,39 +1,35 @@
-# Alertajf
+# AlertaJF
 
-Quero criar um site com o mapa de Juiz de Fora (MG) para monitoramento de chuvas e emergências em tempo real.
+**Juiz de Fora de olho no tempo.** Mapa ao vivo de chuva, alagamentos e emergências em Juiz de Fora (MG).
 
-O site deve ter:
-- Mapa interativo centralizado em Juiz de Fora com marcadores de ruas alagadas, vias interditadas e encostas com risco de deslizamento, além de camadas de previsão e chuva.
-- Faixa de destaque no topo exibindo alertas oficiais da Defesa Civil (como os alertas via SMS 40199 / PJF mostrados na imagem anexada, como tempestades severas e rajadas de vento).
-- Botões de emergência rápidos para acionar a Defesa Civil (199) e os Bombeiros (193).
-- Lista rápida dos pontos críticos da cidade (ex: Rio Paraibuna, Av. Brasil, Santa Luzia, Benfica, Poço Rico) e botão para cidadãos reportarem alagamentos.
+**Site no ar:** https://alertajf.vercel.app/
+**TikTok:** [@alertajf](https://www.tiktok.com/@alertajf)
 
-This project was built with [Lovable](https://lovable.dev).
+## O que o site mostra
 
-**Live app**: https://alertajf.lovable.app
+- **Radar de chuva ao vivo** sobre o mapa de JF, com animação dos últimos quadros e previsão de curto prazo (RainViewer; radar do INPE como alternativa).
+- **Relatos da comunidade no mapa**: alagamentos, vias interditadas e deslizamentos reportados por quem está na rua, com **foto e vídeo** do local. Cada pino fica no mapa por 5 horas e sai automaticamente.
+- **Nível do Rio Paraibuna e de outros rios de JF**, com leituras das estações de telemetria da ANA e indicação de atenção quando a vazão passa do normal.
+- **Previsão para JF**: chuva e rajadas de vento agora e nas próximas horas (Open-Meteo), com selo de risco quando há temporal.
+- **Descargas elétricas** quase em tempo real na região (rede de detecção do INPE/CPTEC).
+- **Alertas oficiais**: avisos do INMET e o último alerta da Defesa Civil de Juiz de Fora, sempre com horário e fonte.
+- **Emergência em um toque**: botões diretos para a **Defesa Civil (199)** e os **Bombeiros (193)**, e instruções para receber os alertas oficiais por SMS (envie seu CEP para **40199**).
 
-## Build with Lovable
+Tudo com dados focados em Juiz de Fora, gratuito e sem cadastro. Dá para instalar como app na tela inicial do celular.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3feea1d4-08c0-4606-8ed0-67cde1795c4d).
+## Importante
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+O AlertaJF é um **projeto independente**, sem vínculo com Prefeitura, Defesa Civil, INMET ou ANA. Os relatos da comunidade são publicados sem revisão prévia e não são verificados. Previsões e medições podem falhar ou atrasar. **Em perigo, busque um local seguro e use os canais oficiais (199 / 193).**
 
-## Development
+## Tecnologia
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Site estático em React + TypeScript (Vite), mapa com Leaflet/OpenStreetMap, relatos e mídia no Supabase, deploy na Vercel.
+
+## Desenvolvimento
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
+git clone https://github.com/mvthebest/alertajf.git
+cd alertajf
 npm i
 npm run dev
 ```
-
-<!-- retry deploy: forcar build do #53 apos limite de cota da Vercel -->
-<!-- retry 2 -->
-
-<!-- retry preview deploy (#54) -->
-<!-- retry preview 2 (#54) -->
-<!-- retry deploy (#54) -->
