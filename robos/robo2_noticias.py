@@ -13,17 +13,37 @@ def feed(busca):
                    fonte=(i.findtext("source") or ""))
 
 
+PALAVRAS = re.compile(r"chuv|alag|deslizament|enxurrad|temporal|interdi|barranco|queda de [aá]rvore|sem luz|sem energia|inunda|transbord", re.I)
+
+
+def feed_local(nome, url):
+    """RSS direto de veículo local (grátis, sem login). Só entram itens com palavra de chuva; G1 só se citar Juiz de Fora."""
+    root = ET.fromstring(c.http("GET", url, raw=True))
+    for i in root.iter("item"):
+        titulo = i.findtext("title") or ""
+        resumo = re.sub(r"<[^>]+>", " ", i.findtext("description") or "")
+        texto = f"{titulo} {resumo}"
+        if not PALAVRAS.search(texto):
+            continue
+        if "g1.globo" in url and "juiz de fora" not in texto.lower():
+            continue
+        yield dict(titulo=titulo, link=(i.findtext("link") or ""), data=i.findtext("pubDate"), resumo=resumo, fonte=nome)
+
+
 def main():
     if not c.esta_chovendo():
         c.log_robo("robo2_noticias", True, "sem chuva nem previsão, dormindo")
         return 0
-    buscas = json.load(open(os.path.join(c.AQUI, "fontes.json")))["noticias_buscas"]
+    fontes = json.load(open(os.path.join(c.AQUI, "fontes.json")))
+    buscas = fontes["noticias_buscas"]
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     vistos, novos, aprov = set(), 0, 0
     fim = c.agora() + dt.timedelta(minutes=9)  # orçamento de tempo do robô
-    for b in buscas:
+    fontes_feed = [(b, lambda b=b: feed(b)) for b in buscas]
+    fontes_feed += [(nome, lambda n=nome, u=url: feed_local(n, u)) for nome, url in fontes.get("rss_locais", [])]
+    for b, gerar in fontes_feed:
         try:
-            itens = list(feed(b))
+            itens = list(gerar())
         except Exception as e:
             print("feed falhou:", b, e)
             continue
