@@ -167,54 +167,72 @@ APP_SESSAO = os.path.join(APP_DIR, "app.json")
 APP_BLOQUEIO = os.path.join(APP_DIR, "bloqueio_app")  # guarda o epoch até quando não tentar de novo
 
 
+TAG_ATUAL = ""
+
+
 class FalhaApp(Exception):
     pass
 
 
-def logar_app():
+def _novo_cliente():
+    from instagrapi import Client
+    cl = Client()
+    cl.delay_range = [2, 5]
+    cl.request_timeout = 30
+    return cl
+
+
+def logar_app(tag=""):
     try:
         import instagrapi  # noqa
     except ImportError:  # o workflow só instala instaloader; instala aqui pra não precisar mexer no YAML
         import subprocess
         subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "instagrapi"], check=True)
-    from instagrapi import Client
     import instagrapi.exceptions as ex
     os.makedirs(APP_DIR, exist_ok=True)
     if os.path.exists(APP_BLOQUEIO):
         try:
-            ate = float(open(APP_BLOQUEIO).read().strip())
+            ate, _, tag_b = open(APP_BLOQUEIO).read().strip().partition("|")
+            ate = float(ate)
         except Exception:
-            ate = 0
-        if ate > time.time():
+            ate, tag_b = 0, ""
+        if ate > time.time() and tag_b == tag:  # trocar "instagram_liberar" em fontes.json libera uma nova tentativa
             raise FalhaApp("em espera por falha anterior (%d min restantes)" % ((ate - time.time()) // 60 + 1))
     user, senha, seed = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD"), os.environ.get("IG_TOTP_SECRET")
     if not user or not senha:
         raise FalhaApp("faltam IG_USERNAME/IG_PASSWORD")
-    cl = Client()
-    cl.delay_range = [2, 5]
-    cl.request_timeout = 30
+    cl = _novo_cliente()
     if os.path.exists(APP_SESSAO):
         try:
-            cl.load_settings(APP_SESSAO)
-            cl.get_timeline_feed()  # uma chamada leve pra ver se a sessão ainda vale
-            print("sessão do app reaproveitada")
-            return cl
-        except Exception as e:
-            print("sessão do app não serviu, logando de novo:", type(e).__name__)
-            cl = Client()
-            cl.delay_range = [2, 5]
-            cl.request_timeout = 30
-    try:
+            cl.load_settings(APP_SESSAO)  # traz o MESMO aparelho (uuids) e a sessão, se houver
+        except Exception:
+            cl = _novo_cliente()
+        if cl.authorization_data:
+            try:
+                cl.get_timeline_feed()  # chamada leve pra ver se a sessão ainda vale
+                print("sessão do app reaproveitada")
+                return cl
+            except Exception as e:
+                print("sessão do app não serviu:", type(e).__name__)
+    cl.dump_settings(APP_SESSAO)  # guarda o aparelho ANTES do login: o que o Marcus aprovar vale nas próximas vezes
+    erro = None
+    for tentativa in (1, 2):
         try:
             cl.login(user, senha, verification_code=totp(seed) if seed else "")
-        except ex.TwoFactorRequired:
-            if not seed:
-                raise FalhaApp("pediu 2FA e falta IG_TOTP_SECRET")
-            cl.login(user, senha, verification_code=totp(seed))
-    except Exception as e:
-        # checkpoint, senha, feedback, rate limit: qualquer erro de login = espera 24h, sem insistir
-        open(APP_BLOQUEIO, "w").write(str(time.time() + 24 * 3600))
-        raise FalhaApp("login do app falhou (%s): %s" % (type(e).__name__, str(e)[:150]))
+            erro = None
+            break
+        except Exception as e:
+            erro = e
+            cl.dump_settings(APP_SESSAO)
+            # Só na 1ª falha: pode ser a telinha "aprovar dispositivo" no celular. Espera 3 min e tenta de novo, mesmo aparelho.
+            if tentativa == 1 and "Bloks" in str(e) or (tentativa == 1 and type(e).__name__ == "TwoFactorRequired"):
+                print("login pendente (provável aprovação de dispositivo), espera 3 min e tenta uma última vez")
+                time.sleep(180)
+                continue
+            break
+    if erro is not None:
+        open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 24 * 3600, tag))
+        raise FalhaApp("login do app falhou (%s): %s" % (type(erro).__name__, str(erro)[:150]))
     cl.dump_settings(APP_SESSAO)
     return cl
 
@@ -239,7 +257,7 @@ def candidatos_app(cl, perfis):
                            publicado_em=data.isoformat(), midia_url=str(m.video_url) if video and m.video_url else None,
                            eh_video=bool(video))
         except (ex.ChallengeRequired, ex.FeedbackRequired, ex.LoginRequired, ex.ChallengeError) as e:
-            open(APP_BLOQUEIO, "w").write(str(time.time() + 24 * 3600))
+            open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 24 * 3600, TAG_ATUAL))
             raise FalhaApp("Instagram barrou a conta no meio da leitura (%s)" % type(e).__name__)
         except Exception as e:
             print(f"perfil {nome}: {type(e).__name__}: {str(e)[:120]}")
@@ -300,8 +318,10 @@ def main():
 
 
 def main_app(cfg, perfis):
+    global TAG_ATUAL
+    TAG_ATUAL = cfg.get("instagram_liberar", "")
     try:
-        cl = logar_app()
+        cl = logar_app(cfg.get("instagram_liberar", ""))
     except FalhaApp as e:
         c.log_robo("robo1_instagram", False, f"Instagram (app): {e}")
         open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(str(e)[:300])
