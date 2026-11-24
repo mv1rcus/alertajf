@@ -210,7 +210,7 @@ def analisar(item):
         raise RuntimeError("Gemini esgotado nesta execução (429/503), análise pulada")
     if time.time() - _INICIO > ORCAMENTO_S:
         raise RuntimeError("orçamento de tempo da execução acabou, análise pulada")
-    for tentativa in range(4):
+    for tentativa in range(5):
         try:
             _ritmo()
             d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_modelo()}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
@@ -221,12 +221,18 @@ def analisar(item):
                 _RUINS.add(_modelo())
                 print(f"modelo {_modelo()} indisponível; tentando outro")
                 continue
-            if "HTTP 429" in str(e) or "HTTP 503" in str(e):
+            if "HTTP 429" in str(e):
+                # cada modelo tem a própria cota grátis: marca este como esgotado nesta execução e tenta o próximo da lista
+                print("Gemini 429 no modelo", _modelo(), "|", str(e)[-260:].replace("\n", " "))
+                _RUINS.add(_modelo())
+                time.sleep(3)
+                continue
+            if "HTTP 503" in str(e):
                 time.sleep(10 * (tentativa + 1))
                 continue
             raise
     _GEMINI_ESGOTADO[0] = True  # não gasta o resto do tempo tentando item por item
-    raise RuntimeError("Gemini indisponível/limite (429) após 4 tentativas")
+    raise RuntimeError("Gemini indisponível/limite (429) em todos os modelos tentados")
 
 
 def validar_analise(a):

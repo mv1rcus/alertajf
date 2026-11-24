@@ -6,3 +6,4 @@ create table if not exists public.ajf_estado (
 );
 alter table public.ajf_estado enable row level security;
 -- sem políticas: só a service role (robôs) lê e escreve; anon/authenticated não enxergam nada.
+grant select, insert, update on public.ajf_estado to service_role;
