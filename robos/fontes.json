@@ -74,7 +74,15 @@
         "mes": 100,
         "dia": 25,
         "reserva": true,
-        "credito_unico": true
+        "credito_unico": true,
+        "ordem": 2
+      },
+      "maviapi": {
+        "mes": 1500,
+        "dia": 60,
+        "reserva": true,
+        "ordem": 1,
+        "valido_ate": "2026-12-01"
       }
     },
     "stories": {
