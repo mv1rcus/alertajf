@@ -466,6 +466,29 @@ def main_browser(cfg, perfis):
     return 0
 
 
+def main_diag():
+    """Diagnóstico sem login: abre a página de login e imprime o que o navegador vê. Não envia credenciais."""
+    sync_playwright = _playwright()
+    _instalar_chromium()
+    with sync_playwright() as pw:
+        br = pw.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        ctx = br.new_context(user_agent=UA, locale="en-US", timezone_id="America/Sao_Paulo", viewport={"width": 1366, "height": 800})
+        page = ctx.new_page()
+        try:
+            resp = page.goto("https://www.instagram.com/accounts/login/?hl=en", wait_until="domcontentloaded", timeout=45000)
+            print("DIAG status:", resp.status if resp else None)
+            for i in (1, 2, 3):
+                page.wait_for_timeout(5000)
+                print("DIAG t=%ds url=%s title=%r" % (5 * i, page.url[:120], page.title()[:80]))
+                print("DIAG inputs:", page.evaluate("[...document.querySelectorAll('input')].map(i=>[i.name,i.type,i.getAttribute('aria-label')])"))
+                print("DIAG buttons:", page.evaluate("[...document.querySelectorAll('button,[role=button]')].map(b=>(b.innerText||'').trim().slice(0,40)).filter(x=>x).slice(0,15)"))
+                print("DIAG body:", page.inner_text("body")[:400].replace("\n", " | "))
+        finally:
+            br.close()
+    c.log_robo("robo1_instagram", True, "diagnóstico do navegador feito (sem login)")
+    return 0
+
+
 def main():
     if not c.esta_chovendo():
         c.log_robo("robo1_instagram", True, "sem chuva nem previsão, dormindo")
@@ -478,6 +501,8 @@ def main():
         return 0
     perfis = list(cfg["instagram"])
     backend = cfg.get("instagram_backend", "browser")
+    if backend == "diag":
+        return main_diag()
     if backend == "browser":
         return main_browser(cfg, perfis)
     if backend == "app":
