@@ -10,9 +10,15 @@ def sessao_anonima():
     return d["access_token"]
 
 
+def limpar(txt):
+    """O ajf_submit recusa < e >: desfaz entidades (&lt; &amp;) e tira os sinais em vez de perder o pin."""
+    import html
+    return html.unescape(str(txt or "")).replace("<", "").replace(">", "")
+
+
 def descricao(it, a):
-    fonte = it["autor"] + (" (Instagram)" if it["origem"] == "instagram" else "")
-    return f'{a["descricao"].strip()} Fonte: {fonte}. Post original: {it["url"]} {AVISO}'[:900]
+    fonte = limpar(it["autor"]) + (" (Instagram)" if it["origem"] == "instagram" else "")
+    return limpar(f'{limpar(a["descricao"]).strip()} Fonte: {fonte}. Post original: {it["url"]} {AVISO}')[:900]
 
 
 def conferir_video(path):
@@ -79,8 +85,12 @@ def main():
     if any(i.get("midia_path") and not i["midia_path"].endswith(".jpg") for i in itens):
         import robo3_baixar
         robo3_baixar.garantir_ffmpeg()
-    token = sessao_anonima()
-    no_ar = publicados_agora()
+    try:
+        token = sessao_anonima()
+        no_ar = publicados_agora()
+    except Exception as e:  # sem sessão não dá para publicar: falha visível, itens continuam na fila
+        c.log_robo("robo4_publicar", False, f"{len(itens)} na fila, nada publicado: sessão/lista pública falhou ({str(e)[:120]})")
+        return 1
     pub = falhas = desc = enviados = 0
     for it in itens:
         try:
@@ -110,7 +120,7 @@ def main():
                 midia = [{"path": it["midia_path"], "kind": "image" if it["midia_path"].endswith(".jpg") else "video", "credit": f'{it["autor"]} (Instagram)'[:120]}]
                 if midia[0]["kind"] == "video" and not conferir_video(it["midia_path"]):  # confere a mídia ANTES de publicar
                     raise RuntimeError("vídeo não é H.264/AAC ou não abre; não publicado")
-            payload = {"street": rua, "neighborhood": bairro, "kind": tipo,
+            payload = {"street": limpar(rua), "neighborhood": limpar(bairro), "kind": tipo,
                        "description": descricao(it, a), "lat": lat, "lng": lon, "observed_at": a["ocorrido_em"], "request_id": str(it["request_id"]), "media": midia}
             if enviados:  # o ajf_submit aceita 1 relato por minuto por sessão: espera, nunca descarta por causa disso
                 time.sleep(62)
