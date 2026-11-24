@@ -24,6 +24,7 @@ env:
   APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
   SCRAPPA_KEY: ${{ secrets.SCRAPPA_KEY }}
   SOCIALTAP_KEY: ${{ secrets.SOCIALTAP_KEY }}
+  MAVIAPI_KEY: ${{ secrets.MAVIAPI_KEY }}
 defaults:
   run:
     working-directory: robos
