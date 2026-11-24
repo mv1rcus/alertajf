@@ -535,9 +535,21 @@ def _ler_maviapi(nome, chave):
     return out
 
 
+def _ler_creatorcrawl(nome, chave):
+    d = _post_json("https://api.creatorcrawl.com/instagram/user/posts?handle=" + urllib.parse.quote(nome), {"x-api-key": chave}, None, 60)
+    out = []
+    for n in d.get("data") or []:
+        m = (n.get("media") or [{}])[0]
+        video = (n.get("type") or m.get("type") or "") == "video"
+        cod = (n.get("url") or "").rstrip("/").split("/")[-1]
+        out.append(dict(shortcode=cod, legenda=n.get("text") or "", quando=n.get("created_at") or "", video=video, midia=m.get("url")))
+    return out
+
+
 # nome -> (segredo no ambiente, leitor, custo em unidades por perfil lido)
 SERVICOS = {"scrappa": ("SCRAPPA_KEY", _ler_scrappa, 1), "apify": ("APIFY_TOKEN", _ler_apify, 1),
-            "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1)}
+            "socialtap": ("SOCIALTAP_KEY", _ler_socialtap, 1), "maviapi": ("MAVIAPI_KEY", _ler_maviapi, 1),
+            "creatorcrawl": ("CREATORCRAWL_KEY", _ler_creatorcrawl, 1)}
 
 
 def _main_posts(cfg):
