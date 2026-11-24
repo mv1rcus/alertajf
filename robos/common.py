@@ -8,6 +8,13 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 JANELA_HORAS = 2  # cada pino dura 2h (mesma janela de expiração dos relatos do site)
 JF_BBOX = (-21.90, -21.60, -43.60, -43.15)  # lat_min, lat_max, lon_min, lon_max
 UA = "AlertaJF-robos/1.0 (+https://github.com/mvthebest/alertajf)"
+try:
+    sys.stdout.reconfigure(line_buffering=True)  # log aparece na hora, mesmo se o job for cortado
+except Exception:
+    pass
+_INICIO = time.time()
+ORCAMENTO_S = 600  # a IA para de analisar depois de 10 min: o job tem limite de 15 e não pode travar a fila
+_GEMINI_ESGOTADO = [False]
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -161,7 +168,11 @@ def analisar(item):
                                    publicado=item.get("publicado_em") or "desconhecido", legenda=(item.get("legenda") or "")[:3000])
     corpo = {"contents": [{"parts": [{"text": prompt}]}],
              "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
-    for tentativa in range(6):
+    if _GEMINI_ESGOTADO[0]:
+        raise RuntimeError("Gemini esgotado nesta execução (429/503), análise pulada")
+    if time.time() - _INICIO > ORCAMENTO_S:
+        raise RuntimeError("orçamento de tempo da execução acabou, análise pulada")
+    for tentativa in range(4):
         try:
             _ritmo()
             d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_modelo()}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
@@ -176,6 +187,7 @@ def analisar(item):
                 time.sleep(10 * (tentativa + 1))
                 continue
             raise
+    _GEMINI_ESGOTADO[0] = True  # não gasta o resto do tempo tentando item por item
     raise RuntimeError("Gemini indisponível/limite (429) após 4 tentativas")
 
 
