@@ -117,7 +117,7 @@ def main():
                 continue
             midia = []
             if it.get("midia_path"):
-                midia = [{"path": it["midia_path"], "kind": "image" if it["midia_path"].endswith(".jpg") else "video", "credit": f'{it["autor"]} (Instagram)'[:120]}]
+                midia = [{"path": it["midia_path"], "kind": "image" if it["midia_path"].endswith(".jpg") else "video", "credit": (f'{it["autor"]} (Instagram)' if it["origem"] == "instagram" else f'Imagem: {it["autor"]}')[:120]}]
                 if midia[0]["kind"] == "video" and not conferir_video(it["midia_path"]):  # confere a mídia ANTES de publicar
                     raise RuntimeError("vídeo não é H.264/AAC ou não abre; não publicado")
             payload = {"street": limpar(rua), "neighborhood": limpar(bairro), "kind": tipo,
