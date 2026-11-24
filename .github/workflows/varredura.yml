@@ -23,6 +23,7 @@ env:
   IG_TOTP_SECRET: ${{ secrets.IG_TOTP_SECRET }}
   APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
   SCRAPPA_KEY: ${{ secrets.SCRAPPA_KEY }}
+  SOCIALTAP_KEY: ${{ secrets.SOCIALTAP_KEY }}
 defaults:
   run:
     working-directory: robos
