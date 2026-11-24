@@ -1,5 +1,5 @@
 """ROBÔ 4: publica no site pela função pública ajf_submit (mesmas regras do formulário) e confere se a mídia abre."""
-import json, os, subprocess, sys, tempfile, uuid
+import json, os, subprocess, sys, tempfile, time, uuid
 import common as c
 
 AVISO = "Não verificado."
@@ -30,7 +30,23 @@ def publicados_agora():
     return d if isinstance(d, list) else []
 
 
+def retirar_do_ar():
+    """Retira pins listados em retirar.json (duplicados/erros) marcando withdrawn pela service role. Arquivo vazio = nada a fazer."""
+    try:
+        ids = json.load(open(os.path.join(c.AQUI, "retirar.json")))
+    except Exception:
+        return
+    for rid in ids:
+        try:
+            h = {"apikey": c.SERVICE_KEY, "Authorization": f"Bearer {c.SERVICE_KEY}", "Accept-Profile": "ajf_private", "Content-Profile": "ajf_private", "Prefer": "return=representation"}
+            r = c.http("PATCH", f"{c.SUPABASE_URL}/rest/v1/reports?id=eq.{rid}", h, {"withdrawn": True})
+            print("retirado do ar:", rid, "linhas:", len(r or []))
+        except Exception as e:
+            print("FALHOU ao retirar", rid, e)
+
+
 def main():
+    retirar_do_ar()
     itens = c.fila_listar("baixado", 10)
     if not itens:
         c.log_robo("robo4_publicar", True, "nada na fila para publicar")
@@ -40,7 +56,7 @@ def main():
         robo3_baixar.garantir_ffmpeg()
     token = sessao_anonima()
     no_ar = publicados_agora()
-    pub = falhas = desc = 0
+    pub = falhas = desc = enviados = 0
     for it in itens:
         try:
             a = it["analise"]
@@ -71,6 +87,9 @@ def main():
                     raise RuntimeError("vídeo não é H.264/AAC ou não abre; não publicado")
             payload = {"street": rua, "neighborhood": bairro, "kind": tipo,
                        "description": descricao(it, a), "lat": lat, "lng": lon, "observed_at": a["ocorrido_em"], "request_id": str(it["request_id"]), "media": midia}
+            if enviados:  # o ajf_submit aceita 1 relato por minuto por sessão: espera, nunca descarta por causa disso
+                time.sleep(62)
+            enviados += 1
             rid = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit", {"apikey": c.PUBLISHABLE_KEY, "Authorization": f"Bearer {token}"}, {"payload": payload})
             c.fila_atualizar(it["id"], estado="publicado", motivo=f"id={rid}")  # marca na hora: nunca republica o mesmo item
             if not any(r.get("id") == rid for r in publicados_agora()):
@@ -79,9 +98,12 @@ def main():
             pub += 1
         except Exception as e:
             msg = str(e)
-            if "Você já enviou" in msg or "Limite" in msg:  # duplicado/limite do site: não insistir
+            if "Você já enviou" in msg:  # pin igual já no ar: não republicar
                 c.fila_atualizar(it["id"], estado="descartado", motivo=msg[:200])
                 desc += 1
+            elif "Limite" in msg:  # limite de envio do site: o item continua na fila e sobe na próxima execução
+                print("limite do site, item fica na fila:", it["post_id"], msg[:120])
+                falhas += 1
             else:
                 falhas += 1
                 print("FALHOU:", it["post_id"], e)
