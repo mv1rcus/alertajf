@@ -96,6 +96,91 @@ def candidatos(L, perfis):
         print("stories:", e)
 
 
+# ---- Descoberta de perfis novos (autorizado pelo Marcus): segue no máximo 3 por dia, sem retry ----
+ESTADO = os.path.join(c.AQUI, "..", ".ig-sessao", "estado.json")  # fica no cache do Actions, junto da sessão
+TEMA = ("notícia", "noticia", "jornal", "clima", "tempo", "chuva", "trânsito", "transito", "alagamento",
+        "defesa civil", "ocorrência", "ocorrencia", "plantão", "plantao", "informa", "agora", "imprensa", "tv")
+MAX_FOLLOWS_DIA = 3
+PAUSA_FOLLOW_MIN = 5
+
+
+def ler_estado():
+    try:
+        return json.load(open(ESTADO))
+    except Exception:
+        return {}
+
+
+def gravar_estado(e):
+    os.makedirs(os.path.dirname(ESTADO), exist_ok=True)
+    json.dump(e, open(ESTADO, "w"))
+
+
+def eh_de_jf_e_do_tema(p):
+    texto = " ".join([p.username or "", p.full_name or "", p.biography or ""]).lower()
+    import re
+    de_jf = "juiz de fora" in texto or "juizdefora" in texto or bool(re.search(r"(^|[^a-z])jf|jf($|[^a-z])", texto))
+    return de_jf and any(t in texto for t in TEMA)
+
+
+def seguir(L, p):
+    """Segue via sessão logada. Endpoint não oficial: qualquer recusa vira parada do dia."""
+    ctx = L.context
+    r = ctx._session.post(f"https://www.instagram.com/api/v1/friendships/create/{p.userid}/",
+                          headers={"x-csrftoken": ctx._session.cookies.get("csrftoken", ""), "x-ig-app-id": "936619743392459",
+                                   "x-requested-with": "XMLHttpRequest", "referer": f"https://www.instagram.com/{p.username}/"},
+                          timeout=30)
+    if r.status_code != 200 or '"status":"ok"' not in r.text.replace(" ", ""):
+        raise RuntimeError(f"follow recusado (HTTP {r.status_code})")
+
+
+def descobrir(L, itens):
+    import re
+    hoje = c.agora().date().isoformat()
+    e = ler_estado()
+    if e.get("dia") != hoje:
+        e["dia"], e["follows"] = hoje, 0
+    if e.get("parado_ate_dia") == hoje:
+        return
+    conhecidos = {n.lower() for n in json.load(open(os.path.join(c.AQUI, "fontes.json")))["instagram"]}
+    conhecidos |= {n.lower() for n in e.get("extras", [])} | {n.lower() for n in e.get("avaliados", [])}
+    mencoes = []
+    for it in itens:
+        for m in re.findall(r"@([A-Za-z0-9._]{3,30})", it.get("legenda") or ""):
+            m = m.strip(".").lower()
+            if m not in conhecidos and m not in mencoes:
+                mencoes.append(m)
+    pendente = e.get("pendente")
+    if pendente and time.time() - pendente.get("ts", 0) > 7 * 86400:
+        e.pop("pendente")
+        pendente = None
+    for nome in mencoes[:4]:  # no máx. 4 consultas por ciclo
+        if e["follows"] >= MAX_FOLLOWS_DIA:
+            break
+        if time.time() - e.get("ultimo_follow", 0) < PAUSA_FOLLOW_MIN * 60:
+            break
+        time.sleep(random.uniform(3, 6))
+        e.setdefault("avaliados", []).append(nome)
+        try:
+            p = instaloader.Profile.from_username(L.context, nome)
+            if not eh_de_jf_e_do_tema(p):
+                continue
+            if p.is_private and pendente:
+                continue  # no máx. 1 solicitação pendente por vez
+            seguir(L, p)
+            e["follows"] += 1
+            e["ultimo_follow"] = time.time()
+            e.setdefault("extras", []).append(nome)
+            if p.is_private:
+                e["pendente"] = pendente = {"nome": nome, "ts": time.time()}
+            c.log_robo("robo1_instagram", True, f"perfil novo seguido: @{nome}")
+        except Exception as ex:
+            e["parado_ate_dia"] = hoje  # recusou ou erro: para o dia, sem retry
+            c.log_robo("robo1_instagram", False, f"descoberta parou hoje ({nome}): {str(ex)[:120]}")
+            break
+    gravar_estado(e)
+
+
 def main():
     if not c.esta_chovendo():
         c.log_robo("robo1_instagram", True, "sem chuva nem previsão, dormindo")
@@ -106,7 +191,8 @@ def main():
     if not cfg.get("instagram_ativo", True):
         c.log_robo("robo1_instagram", True, "pausado (instagram_ativo=false em fontes.json): login recusado, sem insistir")
         return 0
-    perfis = cfg["instagram"]
+    perfis = list(cfg["instagram"])
+    perfis += [n for n in ler_estado().get("extras", []) if n not in perfis]
     try:
         L = logar()
     except Exception as e:
@@ -114,7 +200,9 @@ def main():
         open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(str(e)[:300])
         return 0  # não derruba o fluxo; o workflow abre uma issue
     novos = analisados = 0
+    vistos = []
     for it in candidatos(L, perfis):
+        vistos.append(it)
         try:
             if not it["legenda"].strip() and not it["eh_video"]:
                 continue
@@ -126,6 +214,10 @@ def main():
                 analisados += ok
         except Exception as e:
             print("candidato falhou:", it.get("post_id"), e)
+    try:
+        descobrir(L, vistos)
+    except Exception as ex:
+        print("descoberta:", ex)
     c.log_robo("robo1_instagram", True, f"{novos} novos candidatos, {analisados} aprovados pela IA")
     return 0
 
