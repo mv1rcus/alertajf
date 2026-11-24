@@ -18,6 +18,8 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const markers = useRef<L.LayerGroup | null>(null);
+  const markerEntries = useRef(new Map<string, { marker: L.Marker; sig: string; pending?: { ponto: Ponto | null } }>());
+  const selectedPin = useRef<L.CircleMarker | null>(null);
   const layers = useRef<L.GridLayer[]>([]);
   const radar = radarFrames?.length ? radarFrames : null;
   const [radarError, setRadarError] = useState(false);
@@ -35,38 +37,79 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
     const resize = new ResizeObserver(() => m.invalidateSize()); resize.observe(el.current);
     return () => { resize.disconnect(); m.remove(); map.current = null; };
   }, []);
+  // Assinatura do conteúdo do marcador: só recriamos o pin quando algo visível muda,
+  // para o popup aberto (e o vídeo tocando) não ser derrubado pela atualização periódica dos relatos.
+  const sig = (p: Ponto) => JSON.stringify([p.nome, p.tipo, p.descricao, p.lat, p.lng, p.media?.map(m => [m.path, m.kind, m.credit ?? ""])]);
+  const buildMarker = (p: Ponto): L.Marker => {
+    const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${colors[p.tipo]}">${icons[p.tipo]}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
+    const popup = document.createElement("div");
+    const name = document.createElement("strong"); name.textContent = p.nome;
+    const text = document.createElement("p"); text.textContent = p.descricao;
+    popup.append(name, text);
+    if (p.media?.length) {
+      const box = document.createElement("div"); box.className = "popup-media";
+      p.media.forEach(m => {
+        const url = reportMediaUrl(m.path);
+        if (m.kind === "video") {
+          const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none";
+          const play = document.createElement("button"); play.type = "button"; play.className = "popup-media-play";
+          play.textContent = "\u25b6 Tocar v\u00eddeo";
+          play.addEventListener("click", () => { if (!v.src) { v.src = url; v.preload = "auto"; } void v.play().catch(() => {}); play.remove(); });
+          box.append(play, v);
+        } else {
+          const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+          const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
+          a.append(img); box.append(a);
+        }
+        if (m.credit) { const c = document.createElement("small"); c.textContent = `Mídia: ${m.credit}`; box.append(c); }
+      });
+      popup.append(box);
+    }
+    return L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) });
+  };
+  const dropMarker = (id: string) => {
+    const entry = markerEntries.current.get(id); if (!entry) return;
+    entry.marker.off("popupclose");
+    markers.current?.removeLayer(entry.marker);
+    markerEntries.current.delete(id);
+  };
+  const addMarker = (p: Ponto) => {
+    const marker = buildMarker(p);
+    marker.on("popupclose", () => onPopupClosed(p.id));
+    markers.current?.addLayer(marker);
+    markerEntries.current.set(p.id, { marker, sig: sig(p) });
+  };
+  // Se o relato mudou ou saiu da lista enquanto o popup dele está aberto, guardamos a
+  // mudança e aplicamos só quando o usuário fechar o popup.
+  const onPopupClosed = (id: string) => {
+    const entry = markerEntries.current.get(id);
+    if (!entry?.pending) return;
+    const next = entry.pending.ponto;
+    dropMarker(id);
+    if (next) addMarker(next);
+  };
   useEffect(() => {
     const group = markers.current; if (!group) return;
-    group.clearLayers();
+    const seen = new Set<string>();
     pontos.forEach(p => {
-      const icon = L.divIcon({ className: "", html: `<div class="pin" style="background:${colors[p.tipo]}">${icons[p.tipo]}</div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
-      const popup = document.createElement("div");
-      const name = document.createElement("strong"); name.textContent = p.nome;
-      const text = document.createElement("p"); text.textContent = p.descricao;
-      popup.append(name, text);
-      if (p.media?.length) {
-        const box = document.createElement("div"); box.className = "popup-media";
-        p.media.forEach(m => {
-          const url = reportMediaUrl(m.path);
-          if (m.kind === "video") {
-            const v = document.createElement("video"); v.controls = true; v.playsInline = true; v.preload = "none";
-            const play = document.createElement("button"); play.type = "button"; play.className = "popup-media-play";
-            play.textContent = "\u25b6 Tocar v\u00eddeo";
-            play.addEventListener("click", () => { if (!v.src) { v.src = url; v.preload = "auto"; } void v.play().catch(() => {}); play.remove(); });
-            box.append(play, v);
-          } else {
-            const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
-            const img = document.createElement("img"); img.src = url; img.alt = `Foto do relato em ${p.nome}`; img.loading = "lazy";
-            a.append(img); box.append(a);
-          }
-          if (m.credit) { const c = document.createElement("small"); c.textContent = `Mídia: ${m.credit}`; box.append(c); }
-        });
-        popup.append(box);
-      }
-      L.marker([p.lat, p.lng], { icon }).bindPopup(popup, { maxWidth: Math.min(250, window.innerWidth - 56), keepInView: true, autoPanPadding: L.point(28, 90) }).addTo(group);
+      seen.add(p.id);
+      const entry = markerEntries.current.get(p.id);
+      if (entry && entry.sig === sig(p)) { delete entry.pending; return; }
+      if (entry?.marker.isPopupOpen()) { entry.pending = { ponto: p }; return; }
+      if (entry) dropMarker(p.id);
+      addMarker(p);
     });
-    if (selected) L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
-  }, [pontos, selected]);
+    markerEntries.current.forEach((entry, id) => {
+      if (seen.has(id)) return;
+      if (entry.marker.isPopupOpen()) { entry.pending = { ponto: null }; return; }
+      dropMarker(id);
+    });
+  }, [pontos]);
+  useEffect(() => {
+    const group = markers.current; if (!group) return;
+    if (selectedPin.current) { group.removeLayer(selectedPin.current); selectedPin.current = null; }
+    if (selected) selectedPin.current = L.circleMarker([selected.lat, selected.lng], { color: "#127e86", fillColor: "#127e86", fillOpacity: .3, radius: 13 }).bindTooltip("Local selecionado").addTo(group);
+  }, [selected]);
   useEffect(() => {
     const m = map.current; if (!m || !onPick) return;
     const click = (e: L.LeafletMouseEvent) => onPick(e.latlng.lat, e.latlng.lng);
