@@ -45,6 +45,12 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
     const group = markers.current; if (!group) return;
     const buildPopup = (p: Ponto) => {
       const popup = document.createElement("div");
+      // Cliques dentro do popup (botão "Tocar vídeo", controles do player) chegam até
+      // o contêiner do mapa: o Leaflet os trata como clique no mapa e fecha o popup,
+      // cortando o vídeo. Bloqueamos a propagação na raiz do conteúdo do popup.
+      L.DomEvent.disableClickPropagation(popup);
+      popup.addEventListener("click", (e) => e.stopPropagation());
+      popup.addEventListener("dblclick", (e) => e.stopPropagation());
       const name = document.createElement("strong"); name.textContent = p.nome;
       const text = document.createElement("p"); text.textContent = p.descricao;
       popup.append(name, text);
