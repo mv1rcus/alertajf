@@ -466,6 +466,103 @@ def main_browser(cfg, perfis):
     return 0
 
 
+APIFY_USO = os.path.join(APP_DIR, "apify_uso.json")
+
+
+def _apify_uso():
+    try:
+        return json.load(open(APIFY_USO))
+    except Exception:
+        return {}
+
+
+def main_apify(cfg):
+    """Instagram via Apify (plano grátis, US$5/mês de crédito, sem cartão). Modo econômico: poucos perfis, só com chuva
+    confirmada, intervalo mínimo entre varreduras e tetos diário e mensal de resultados gravados aqui (nunca estoura)."""
+    ap = cfg.get("apify", {})
+    perfis = ap.get("perfis") or cfg["instagram"][:5]
+    teto_dia, teto_mes = ap.get("teto_dia", 60), ap.get("teto_mes", 1500)  # 1500 x US$0,0026 = US$3,90 de US$5
+    intervalo = ap.get("intervalo_min", 45) * 60
+    token = os.environ.get("APIFY_TOKEN")
+    os.makedirs(APP_DIR, exist_ok=True)
+    if not token:
+        c.log_robo("robo1_instagram", False, "Instagram (Apify): falta o segredo APIFY_TOKEN")
+        return 0
+    if not c.chuva_confirmada():
+        c.log_robo("robo1_instagram", True, "Instagram (Apify): sem chuva confirmada, poupando a cota grátis")
+        return 0
+    agora = dt.datetime.now(dt.timezone.utc)
+    uso = _apify_uso()
+    mes, dia = agora.strftime("%Y-%m"), agora.strftime("%Y-%m-%d")
+    if uso.get("mes") != mes:
+        uso = {"mes": mes, "resultados": 0}
+    if uso.get("dia") != dia:
+        uso["dia"], uso["dia_resultados"] = dia, 0
+    if time.time() < uso.get("pausa_ate", 0):
+        c.log_robo("robo1_instagram", True, "Instagram (Apify): em pausa por erro anterior")
+        return 0
+    if time.time() - uso.get("ultimo", 0) < intervalo:
+        c.log_robo("robo1_instagram", True, "Instagram (Apify): aguardando o intervalo mínimo entre varreduras")
+        return 0
+    prev = len(perfis) * ap.get("posts_por_perfil", 1) + len(perfis)  # estimativa conservadora de resultados
+    if uso["resultados"] + len(perfis) > teto_mes or uso["dia_resultados"] + len(perfis) > teto_dia:
+        c.log_robo("robo1_instagram", True, "Instagram (Apify): teto de resultados atingido (dia %d/%d, mês %d/%d), sem gastar mais" % (uso["dia_resultados"], teto_dia, uso["resultados"], teto_mes))
+        return 0
+    uso["ultimo"] = time.time()  # grava antes: mesmo se falhar, não repete antes do intervalo
+    json.dump(uso, open(APIFY_USO, "w"))
+    import urllib.request, urllib.error
+    req = urllib.request.Request(
+        "https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?timeout=120",
+        data=json.dumps({"usernames": perfis}).encode(), method="POST",
+        headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=150) as r:
+            itens = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        uso["pausa_ate"] = time.time() + (24 if e.code in (402, 403) else 2) * 3600  # 402/403 = cota/crédito acabou
+        json.dump(uso, open(APIFY_USO, "w"))
+        c.log_robo("robo1_instagram", False, "Instagram (Apify): HTTP %s" % e.code)
+        open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write("Apify HTTP %s" % e.code)
+        return 0
+    except Exception as e:
+        uso["pausa_ate"] = time.time() + 2 * 3600
+        json.dump(uso, open(APIFY_USO, "w"))
+        c.log_robo("robo1_instagram", False, "Instagram (Apify): %s" % type(e).__name__)
+        return 0
+    uso["resultados"] += len(itens)
+    uso["dia_resultados"] += len(itens)
+    json.dump(uso, open(APIFY_USO, "w"))
+    limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
+    novos = analisados = lidos = 0
+    for u in itens:
+        nome = u.get("username") or "?"
+        for n in (u.get("latestPosts") or [])[:12]:
+            try:
+                data = dt.datetime.fromisoformat((n.get("timestamp") or "").replace("Z", "+00:00"))
+                if data.tzinfo is None:
+                    data = data.replace(tzinfo=dt.timezone.utc)
+                if data < limite:
+                    continue
+                video = (n.get("type") or "").lower() == "video"
+                it = dict(origem="instagram", post_id=n.get("shortCode") or n.get("id"), autor=f"@{nome}",
+                          url=n.get("url") or f"https://www.instagram.com/p/{n.get('shortCode')}/",
+                          legenda=n.get("caption") or "", publicado_em=data.isoformat(),
+                          midia_url=n.get("videoUrl") if video else None, eh_video=video)
+                lidos += 1
+                if not it["legenda"].strip() and not video:
+                    continue
+                a = c.analisar(it)
+                ok, motivo = c.validar_analise(a)
+                it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
+                if c.fila_inserir(it):
+                    novos += 1
+                    analisados += ok
+            except Exception as e:
+                print("candidato falhou:", n.get("shortCode"), e)
+    c.log_robo("robo1_instagram", True, "Apify: %d perfis, %d posts recentes, %d novos, %d aprovados pela IA (uso do mês %d/%d resultados)" % (len(itens), lidos, novos, analisados, uso["resultados"], teto_mes))
+    return 0
+
+
 def main_diag():
     """Diagnóstico sem login: abre a página de login e imprime o que o navegador vê. Não envia credenciais."""
     sync_playwright = _playwright()
@@ -501,6 +598,8 @@ def main():
         return 0
     perfis = list(cfg["instagram"])
     backend = cfg.get("instagram_backend", "browser")
+    if backend == "apify":
+        return main_apify(cfg)
     if backend == "diag":
         return main_diag()
     if backend == "browser":

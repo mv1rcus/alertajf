@@ -50,6 +50,18 @@
     ]
   ],
   "instagram_ativo": true,
-  "instagram_liberar": "t3",
-  "instagram_backend": "diag"
+  "instagram_liberar": "t4",
+  "instagram_backend": "apify",
+  "apify": {
+    "perfis": [
+      "tribunademinas",
+      "transitojuizdefora",
+      "jfdepressao",
+      "noticiasjf1",
+      "acessa.com_"
+    ],
+    "intervalo_min": 45,
+    "teto_dia": 60,
+    "teto_mes": 1500
+  }
 }
