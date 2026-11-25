@@ -189,7 +189,9 @@ function Index() {
   const regioesMax1h = regioes.length ? regioes.reduce((a, b) => (b.mm1h ?? 0) > (a.mm1h ?? 0) ? b : a) : null;
   // Banner de chuva forte: medição real >= 10 mm/h em alguma estação da cidade
   // ou aviso INMET laranja (Perigo) / vermelho (Grande Perigo) ativo para JF.
-  const avisoForte = avisos.find(a => /perigo/i.test(a.severidade) && (a.fimTs === null || a.fimTs > Date.now()));
+  const avisosVivos = avisos.filter(a => a.fimTs === null || a.fimTs > Date.now());
+  // Só laranja ("Perigo") ou vermelho ("Grande Perigo"); "Perigo Potencial" (amarelo) não abre banner.
+  const avisoForte = avisosVivos.find(a => /grande perigo/i.test(a.severidade)) ?? avisosVivos.find(a => /^perigo$/i.test(a.severidade.trim()));
   const mmForte = regioesMax1h?.mm1h ?? 0;
   const bannerChuva = mmForte >= 10 || !!avisoForte;
   const bannerTexto = [
@@ -240,7 +242,7 @@ function Index() {
     <a className="skip" href="#main">Pular para o conteúdo</a>
     <header className="top"><a href="/" className="brand"><span className="brand-icon"><CloudRain size={24}/></span>Alerta<span>JF</span><small>JUIZ DE FORA · MG</small></a><nav><a href="#previsao">Previsão</a><a href="#ocorrencias">Ruas e relatos</a><a href="tel:199" className="emergency">Emergência <b>199</b><ArrowUpRight size={15}/></a></nav></header>
     <main id="main">
-      {bannerChuva && <div className="banner-chuva" role="alert"><CloudRain size={20}/><div><b>Chuva forte em Juiz de Fora</b><p>{bannerTexto || "Chuva intensa detectada agora pelas estações da cidade."} Evite áreas de alagamento e não atravesse enxurrada. Em perigo, ligue <a href="tel:199">199</a>.</p></div></div>}
+      {bannerChuva && <div className="banner-chuva" role="alert"><CloudRain size={20}/><div><b>Chuva forte em Juiz de Fora</b><p>{bannerTexto ? `${bannerTexto}. ` : "Chuva intensa detectada agora pelas estações da cidade. "}Evite áreas de alagamento e não atravesse enxurrada. Em perigo, ligue <a href="tel:199">199</a>.</p></div></div>}
       <div className="eyebrow">PAINEL AMBIENTAL · JUIZ DE FORA / MG</div>
       <section className="intro"><div><h1>Juiz de Fora.<br/><span>De olho no tempo.</span></h1><p>Radar de chuva, Rio Paraibuna e ocorrências da cidade. Dados com origem e horário, sem falsa sensação de segurança.</p><div className="hero-cta"><a className="hero-cta-main" href="#ocorrencias"><MapPin size={17}/>Ver mapa da chuva</a><a className="hero-cta-sec" href="#previsao"><CloudRain size={17}/>Previsão</a></div></div><div className="independent"><ShieldCheck size={21}/><span>Projeto independente<br/><small>Não substitui os canais oficiais.</small></span></div></section>
 
