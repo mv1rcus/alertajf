@@ -18,6 +18,10 @@ def totp(segredo, agora=None):
     o = h[-1] & 15
     return "%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000)
 
+# Pasta só da rodada, fora do repositório e sem cache: nada de sessão é guardado entre rodadas nem sobe pro GitHub.
+import tempfile
+SESS_EFEMERA = os.path.join(tempfile.gettempdir(), "ajf-ig-efemero")
+
 
 def logar():
     L = instaloader.Instaloader(quiet=True, download_pictures=False, download_videos=False, save_metadata=False,
@@ -25,7 +29,7 @@ def logar():
     user, senha = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD")
     if not user or not senha:
         raise RuntimeError("Faltam os secrets IG_USERNAME/IG_PASSWORD")
-    pasta = os.path.join(c.AQUI, "..", ".ig-sessao")  # pasta guardada no cache do Actions entre runs
+    pasta = os.path.join(SESS_EFEMERA)  # efêmera: só vive na rodada
     if os.path.isfile(pasta):  # formato antigo (arquivo): troca por pasta
         os.remove(pasta)
     os.makedirs(pasta, exist_ok=True)
@@ -104,7 +108,7 @@ def candidatos(L, perfis):
 
 
 # ---- Descoberta de perfis novos: só ADICIONA à varredura. Nunca segue ninguém (decisão do Marcus). ----
-ESTADO = os.path.join(c.AQUI, "..", ".ig-sessao", "estado.json")  # fica no cache do Actions, junto da sessão
+ESTADO = None  # (o estado da descoberta agora fica em ajf_estado, chave ig_descoberta)
 TEMA = ("notícia", "noticia", "jornal", "clima", "tempo", "chuva", "trânsito", "transito", "alagamento",
         "defesa civil", "ocorrência", "ocorrencia", "plantão", "plantao", "informa", "agora", "imprensa", "tv")
 MAX_NOVOS_DIA = 3
@@ -112,14 +116,13 @@ MAX_NOVOS_DIA = 3
 
 def ler_estado():
     try:
-        return json.load(open(ESTADO))
+        return c.estado_ler("ig_descoberta") or {}
     except Exception:
         return {}
 
 
 def gravar_estado(e):
-    os.makedirs(os.path.dirname(ESTADO), exist_ok=True)
-    json.dump(e, open(ESTADO, "w"))
+    c.estado_gravar("ig_descoberta", e)
 
 
 def eh_de_jf_e_do_tema(p):
@@ -162,7 +165,7 @@ def descobrir(L, itens):
 
 
 # ---- Backend "app" (API móvel via instagrapi): o scraping web do instaloader leva "deslogado" em IP de servidor ----
-APP_DIR = os.path.join(c.AQUI, "..", ".ig-sessao")
+APP_DIR = os.path.join(SESS_EFEMERA)
 APP_SESSAO = os.path.join(APP_DIR, "app.json")
 APP_BLOQUEIO = os.path.join(APP_DIR, "bloqueio_app")  # guarda o epoch até quando não tentar de novo
 
@@ -998,8 +1001,8 @@ def _main_login_direto_desativado(cfg, perfis):  # código antigo, inalcançáve
             print("candidato falhou:", it.get("post_id"), e)
     if perfis and len(ERROS_LOGIN) >= len(perfis):  # nenhum perfil leu: sessão sem permissão de leitura
         try:
-            os.remove(os.path.join(c.AQUI, "..", ".ig-sessao", "sessao"))
-            open(os.path.join(c.AQUI, "..", ".ig-sessao", "bloqueio"), "w").write(str(time.time()))
+            os.remove(os.path.join(SESS_EFEMERA, "sessao"))
+            open(os.path.join(SESS_EFEMERA, "bloqueio"), "w").write(str(time.time()))
         except Exception:
             pass
         msg = "Instagram recusou a leitura de todos os %d perfis (sessão deslogada)" % len(perfis)
