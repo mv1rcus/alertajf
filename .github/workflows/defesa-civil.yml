@@ -31,8 +31,8 @@ jobs:
           if ! cmp -s public/defesa-civil.json dados/defesa-civil.json; then
             cp public/defesa-civil.json dados/defesa-civil.json
             cd dados
-            git config user.name "mvthebest"
-            git config user.email "68456420+mvthebest@users.noreply.github.com"
+            git config user.name "mv1rcus"
+            git config user.email "68456420+mv1rcus@users.noreply.github.com"
             git checkout --orphan nova
             git add -A
             git commit -m "dados: alerta Defesa Civil JF"

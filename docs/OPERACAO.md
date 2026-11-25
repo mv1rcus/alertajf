@@ -3,7 +3,7 @@
 Escrito em 24/11/2026. Contém só nomes de itens do cofre, nunca valores. Sempre confira o estado ao vivo antes de agir.
 
 ## 1. O que é
-Site de alerta de chuva de Juiz de Fora: https://alertajf.vercel.app. Repo público github.com/mvthebest/alertajf (sincronizado com o Lovable), Vercel Hobby (grátis), Supabase grátis (projeto fnpssjnsljhwdoikfwcu). Quatro robôs publicam ocorrências no mapa.
+Site de alerta de chuva de Juiz de Fora: https://alertajf.vercel.app. Repo público github.com/mv1rcus/alertajf (sincronizado com o Lovable), Vercel Hobby (grátis), Supabase grátis (projeto fnpssjnsljhwdoikfwcu). Quatro robôs publicam ocorrências no mapa.
 
 ## 2. Regras duras do Marcus
 - Só ferramentas grátis. Avisar qualquer coisa que possa custar. Cadastro que pedir cartão ou endereço de cobrança: parar, preencher nada, avisar o agente principal (Main).
@@ -11,7 +11,7 @@ Site de alerta de chuva de Juiz de Fora: https://alertajf.vercel.app. Repo públ
 - Mídia: vídeo H.264/AAC mp4; foto JPEG (bucket relatos-midia).
 - Crédito da fonte sempre visível, marcado "Não verificado". Cada pin dura 2 h. Nunca forçar pin público para teste.
 - Os robôs acordam com chuva confirmada (>= 0,3 mm na última hora, Open-Meteo) ou previsão chegando.
-- Autoria de commit: só mvthebest, sem co-autor.
+- Autoria de commit: só mv1rcus, sem co-autor.
 - O robô NUNCA loga no Instagram, não segue, não curte, não posta. Nada de trocar senha do Instagram.
 - Qualquer conta nova, segredo ou código de verificação por telefone/email: confirmar com Main ANTES, agrupar os pedidos de código, avisar Main antes de pedir ao Marcus.
 - Marcus quer relatório curto em português, separando jobs, candidatos e pins. Reconhecer erro próprio.
@@ -39,16 +39,16 @@ Site de alerta de chuva de Juiz de Fora: https://alertajf.vercel.app. Repo públ
 - Removido a pedido do Marcus: Bright Data (o segredo BRIGHTDATA_KEY ainda existe no GitHub, inofensivo; apagar com o Marcus com o app GitHub aberto por causa do sudo).
 
 ## 6. Cofre (nomes dos itens, valores nunca)
-GitHub PAT alertajf (instinct) · GitHub mvthebest · Supabase access token alertajf · Supabase alertajf database · Gemini API key alertajf-varredura · Apify API token (AlertaJF) · Scrappa API key (AlertaJF) · herascrape API key AlertaJF · maviapi API key AlertaJF · SocialTap API key AlertaJF · CreatorCrawl API key AlertaJF · api.sh API key (AlertaJF) e api.sh (AlertaJF, Agent Mail) · cron-job.org (AlertaJF, Agent Mail) · GitHub PAT alertajf-defesa-civil-cron (cron-job.org) · Vercel via GitHub mvthebest · Lovable · Instagram (chuvas JF) e Instagram (robô JF, conta nova) (o robô NÃO usa).
+GitHub PAT alertajf (instinct) · GitHub mv1rcus · Supabase access token alertajf · Supabase alertajf database · Gemini API key alertajf-varredura · Apify API token (AlertaJF) · Scrappa API key (AlertaJF) · herascrape API key AlertaJF · maviapi API key AlertaJF · SocialTap API key AlertaJF · CreatorCrawl API key AlertaJF · api.sh API key (AlertaJF) e api.sh (AlertaJF, Agent Mail) · cron-job.org (AlertaJF, Agent Mail) · GitHub PAT alertajf-defesa-civil-cron (cron-job.org) · Vercel via GitHub mv1rcus · Lovable · Instagram (chuvas JF) e Instagram (robô JF, conta nova) (o robô NÃO usa).
 Receita: `tools vault write-file --key password --name '<item>' --return-channel none --json` devolve um caminho; ler com $(cat caminho) no mesmo comando, nunca imprimir, apagar a pasta do cofre depois. Itens criados por agente começam sem acesso do sandbox: pedir o link de aprovação via Main. O email do agente (xitik2@mail.instinct.com) recebe os códigos de cadastro.
 
 ## 7. Como publicar mudanças
-- Código do robô (robos/, scripts/, docs/): commit como mvthebest (`git -c user.name=mvthebest -c user.email=68456420+mvthebest@users.noreply.github.com commit`), push da branch com o PAT (cabeçalho Authorization Basic de x-access-token:TOKEN), abrir o PR pelo navegador na nuvem (config-h, github.com: https://github.com/mvthebest/alertajf/compare/main...BRANCH?expand=1, "Create pull request"), mergear pela API (PUT /pulls/N/merge, squash). O PAT não cria PR, não edita workflow, segredo nem issue: isso vai pelo navegador, e mexer em segredo dispara confirmação no GitHub Mobile do Marcus (avisar Main antes, os dígitos valem ~1 min).
+- Código do robô (robos/, scripts/, docs/): commit como mv1rcus (`git -c user.name=mv1rcus -c user.email=68456420+mv1rcus@users.noreply.github.com commit`), push da branch com o PAT (cabeçalho Authorization Basic de x-access-token:TOKEN), abrir o PR pelo navegador na nuvem (config-h, github.com: https://github.com/mv1rcus/alertajf/compare/main...BRANCH?expand=1, "Create pull request"), mergear pela API (PUT /pulls/N/merge, squash). O PAT não cria PR, não edita workflow, segredo nem issue: isso vai pelo navegador, e mexer em segredo dispara confirmação no GitHub Mobile do Marcus (avisar Main antes, os dígitos valem ~1 min).
 - Visual/front-end (src/): só com ok do Marcus por PR, repassado por Main. A cota de deploy da Vercel Hobby acaba até ~11h de 25/11; mudanças só de robos/ e scripts/ não gastam deploy.
 - Depois de cada lease de navegador: `tools cloud_browser report --outcome` por site.
 
 ## 8. Prova de saúde
-- Runs: https://api.github.com/repos/mvthebest/alertajf/actions/workflows/varredura.yml/runs?per_page=8 (público; logs exigem o PAT).
+- Runs: https://api.github.com/repos/mv1rcus/alertajf/actions/workflows/varredura.yml/runs?per_page=8 (público; logs exigem o PAT).
 - Supabase (API de gestão, POST /v1/projects/fnpssjnsljhwdoikfwcu/database/query): tabelas public.ajf_robos_log, public.ajf_fila, public.ajf_estado, ajf_private.reports (pins), ajf_private.reactions.
 - Sem chuva o robô só registra "poupando a cota grátis": isso é normal.
 
