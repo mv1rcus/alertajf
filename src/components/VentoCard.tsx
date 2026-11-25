@@ -31,6 +31,12 @@ function nivel(raj: number) {
   return "Sem rajadas fortes";
 }
 
+function corNivel(raj: number) {
+  if (raj >= 60) return "#e5484d";
+  if (raj >= 40) return "#f5a524";
+  return "#2fa4a9";
+}
+
 export function VentoCard() {
   const [v, setV] = useState<Vento | null>(null);
   const [erro, setErro] = useState(false);
@@ -56,20 +62,41 @@ export function VentoCard() {
       <div className="eyebrow">VENTO · OPEN-METEO (MODELO)</div>
       <h3>Vento e rajadas em Juiz de Fora</h3>
       <strong className="big-number alert-text">{ok ? `${Math.round(v.vel)} km/h` : "Sem consulta"}</strong>
-      <p>
-        {ok
-          ? `Rajadas de até ${Math.round(v.raj)} km/h agora, vindo de ${PONTOS[Math.round(v.dir / 45) % 8]}. ${nivel(v.raj)}. ${picoProx && picoProx.raj >= 40 ? `Pico previsto nas próximas 12h: ${Math.round(picoProx.raj)} km/h por volta das ${picoProx.h}h.` : "Sem rajadas de 40 km/h ou mais previstas nas próximas 12h."}`
-          : "Consulta indisponível. Isso não significa ausência de vento forte na cidade."}
-      </p>
-      {ok && v.horas.length > 0 && (
-        <div aria-label="Rajadas previstas nas próximas 12 horas, em km/h" style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 44, margin: "8px 0 2px" }}>
-          {v.horas.map((x) => (
-            <div key={x.h} title={`${x.h}h: ${Math.round(x.raj)} km/h`} style={{ flex: 1, height: `${Math.max(8, (x.raj / maxRaj) * 100)}%`, borderRadius: 2, background: x.raj >= 60 ? "#e5484d" : x.raj >= 40 ? "#f5a524" : "#2fa4a9", opacity: 0.9 }} />
-          ))}
-        </div>
+      {ok ? (
+        <>
+          <p className="mm-line">
+            Rajadas de <b>{Math.round(v.raj)} km/h</b> agora · vindo de <b>{PONTOS[Math.round(v.dir / 45) % 8]}</b> · <b style={{ color: corNivel(v.raj) }}>{nivel(v.raj)}</b>
+          </p>
+          <p className="mm-line">
+            {picoProx && picoProx.raj >= 40
+              ? <>Pico previsto: <b>{Math.round(picoProx.raj)} km/h</b> por volta das <b>{picoProx.h}h</b></>
+              : "Sem rajadas de 40 km/h ou mais previstas nas próximas 12h"}
+          </p>
+        </>
+      ) : (
+        <p>Consulta indisponível. Isso não significa ausência de vento forte na cidade.</p>
       )}
-      {ok && v.horas.length > 0 && <small style={{ display: "block" }}>Próximas 12h (rajada máx.): {v.horas[0].h}h a {v.horas[v.horas.length - 1].h}h</small>}
-      <small>{ok ? `Dado do modelo às ${v.agora.slice(11, 16)} (atualiza a cada 15 min), não é sensor de rua` : "Consultando o Open-Meteo…"}</small>
+      {ok && v.horas.length > 0 && (
+        <>
+          <div aria-label="Rajadas previstas nas próximas 12 horas, em km/h" style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 40, margin: "10px 0 0" }}>
+            {v.horas.map((x) => (
+              <div key={x.h} title={`${x.h}h: ${Math.round(x.raj)} km/h`} style={{ flex: 1, height: `${Math.max(8, (x.raj / maxRaj) * 100)}%`, borderRadius: 2, background: corNivel(x.raj), opacity: x === picoProx ? 1 : 0.45 }} />
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 3, marginTop: 2 }} aria-hidden="true">
+            {v.horas.map((x, i) => (
+              <div key={x.h} style={{ flex: 1, textAlign: "center", fontSize: 9, color: "#7d97a3" }}>
+                {i % 3 === 0 || i === v.horas.length - 1 ? `${x.h}h` : ""}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <small className="mm-src">
+        {ok
+          ? `Rajada máx. por hora, ${v.horas[0].h}h a ${v.horas[v.horas.length - 1].h}h · modelo Open-Meteo ${v.agora.slice(11, 16)} · atualiza a cada 15 min · não é sensor de rua`
+          : "Consultando o Open-Meteo…"}
+      </small>
       <details>
         <summary>Sobre esta medição</summary>
         <p>Valores de modelo numérico para o centro de Juiz de Fora, a 10 m de altura. Rajadas locais em tempestade podem ser maiores, e o relevo muda o vento de bairro para bairro. Faixas: abaixo de 40 km/h sem alerta, 40 a 59 moderadas, 60 a 89 fortes, 90 ou mais muito fortes. Em caso de risco, ligue 199 (Defesa Civil).</p>
