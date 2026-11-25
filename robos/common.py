@@ -108,9 +108,42 @@ def log_robo(robo, ok, resumo):
 
 
 # ---------- portão de chuva ----------
+def _cemaden_acc1h_jf():
+    """Maior acc1hr (mm) medido na última hora pelas estações do Cemaden em JF (codibge 3136702).
+    Leitura real de estação, nunca estimativa de modelo. None se o serviço falhar."""
+    try:
+        ests = http("GET", "http://resources.cemaden.gov.br/graficos/interativo/getJson2.php?uf=MG", timeout=20)
+    except Exception as e:
+        print("cemaden falhou, seguindo só com Open-Meteo:", type(e).__name__, str(e)[:100])
+        return None
+    vals = []
+    limite = agora() - dt.timedelta(hours=2)
+    for e in ests or []:
+        if str(e.get("codibge")) != "3136702":
+            continue
+        v, quando = e.get("acc1hr"), e.get("datahoraUltimovalor")
+        if v in (None, "-", "") or not quando:
+            continue
+        try:
+            t = dt.datetime.strptime(quando, "%d/%m/%y %H:%M").replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+        if t < limite:  # estação parada: leitura velha não confirma chuva de agora
+            continue
+        try:
+            vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return max(vals) if vals else 0.0
+
+
 def chuva_confirmada():
     """True só com chuva medida na última hora (sem contar previsão). Usado para economizar cota de serviços pagos no plano grátis."""
     if os.environ.get("FORCAR_VARREDURA") == "1":
+        return True
+    mm_cem = _cemaden_acc1h_jf()
+    if mm_cem is not None and mm_cem >= 0.2:
+        print(f"chuva confirmada por estação Cemaden: {mm_cem:.2f} mm na última hora")
         return True
     u = ("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503"
          "&minutely_15=precipitation&past_minutely_15=4&forecast_minutely_15=0&timezone=UTC")
@@ -125,6 +158,10 @@ def esta_chovendo():
     """Acorda os robôs se choveu em JF na última hora OU se há chuva prevista na próxima hora.
     Fonte: Open-Meteo (grátis, sem chave). Sem chuva nem previsão, os robôs dormem."""
     if os.environ.get("FORCAR_VARREDURA") == "1":
+        return True
+    mm_cem = _cemaden_acc1h_jf()
+    if mm_cem is not None and mm_cem >= 0.2:
+        print(f"chuva confirmada por estação Cemaden: {mm_cem:.2f} mm na última hora")
         return True
     u = ("https://api.open-meteo.com/v1/forecast?latitude=-21.7642&longitude=-43.3503"
          "&minutely_15=precipitation,precipitation_probability&past_minutely_15=4&forecast_minutely_15=4&timezone=UTC")
