@@ -59,3 +59,7 @@ Receita: `tools vault write-file --key password --name '<item>' --return-channel
 4. Apagar o secret BRIGHTDATA_KEY (com o Marcus). Corrigir o comentário "15 min" do varredura.yml (só pelo navegador).
 5. Retestar de vez em quando os espelhos de stories (storiesfly, insnoop, insmask, imginn, picuki, greatfon, storiesig, anonyig e novos). Aprovar só se aguentar leitura automatizada sem login, sem chave e sem anúncio por 2 dias seguidos. Em 24/11: imginn, picuki, greatfon dão 403 do Cloudflare; storiesig.info e anonyig bloqueiam nosso IP; os outros só funcionam pelo navegador.
 6. Possível: subir perfis por varredura ou stories se o Marcus pedir; sempre conferir tetos e custo (tudo precisa continuar grátis).
+
+## Segurança da sessão do Instagram (25/11/2026)
+- O workflow NÃO guarda mais cache de sessão (repo público: cache de sessão logada é risco). O robô1 só escreve sessão numa pasta temporária da rodada. A sessão do leitor logado (@mv1thebest) vive só na tabela privada ajf_segredos. Estado da descoberta de perfis: ajf_estado, chave ig_descoberta. Nunca reintroduzir actions/cache para sessão, cookie ou storage state.
+- Pendente com o Marcus: apagar os secrets órfãos IG_USERNAME, IG_PASSWORD, IG_TOTP_SECRET do GitHub (app aberto, por causa do sudo).
