@@ -28,7 +28,7 @@ Site estático em React + TypeScript (Vite), mapa com Leaflet/OpenStreetMap, rel
 ## Desenvolvimento
 
 ```sh
-git clone https://github.com/mvthebest/alertajf.git
+git clone https://github.com/mv1rcus/alertajf.git
 cd alertajf
 npm i
 npm run dev
