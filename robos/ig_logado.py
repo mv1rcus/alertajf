@@ -3,7 +3,7 @@
   Nada disso vai pro repositório nem pro log.
 - A sessão persiste entre varreduras: só refaz o login (com código TOTP gerado aqui) quando o Instagram a derruba.
 - Só lê: uma chamada em lote (GraphQL web) pros perfis. Não segue, não curte, não vê/marca story, não posta.
-- Qualquer sinal de barragem (challenge, login_required, feedback, 429) pausa 24h e quem chama cai pro Apify."""
+- Sessão derrubada: reloga sozinho; se o login também falhar, pausa 1h e tenta de novo. Challenge/checkpoint: pausa 2h e tenta de novo. 429: pausa 6h. Nunca fica parado 24h (regra do Marcus, 25/11). Em pausa, quem chama cai pro Apify."""
 import json, os, sys, time, hmac, hashlib, struct, base64, random, urllib.parse
 import common as c
 
@@ -159,8 +159,11 @@ def ler_stories(perfis, cfg):
         est["ok"] = time.time()
         c.estado_gravar(CHAVE_EST, est)
         return linhas
-    except (ex.ChallengeRequired, ex.ChallengeError, ex.FeedbackRequired, ex.LoginRequired, ex.TwoFactorRequired) as e:
-        _pausar(est, 24, type(e).__name__)
+    except ex.LoginRequired as e:
+        _pausar(est, 1, type(e).__name__)  # sessão derrubada e o relogin falhou: respira 1h e tenta de novo
+        raise Falha(type(e).__name__)
+    except (ex.ChallengeRequired, ex.ChallengeError, ex.FeedbackRequired, ex.TwoFactorRequired) as e:
+        _pausar(est, 2, type(e).__name__)  # challenge/checkpoint: com calma, espaçado, sem martelar (regra do Marcus, 25/11)
         raise Falha(type(e).__name__)
     except ex.ClientError as e:
         msg = str(e)[:120]

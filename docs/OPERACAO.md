@@ -61,5 +61,6 @@ Receita: `tools vault write-file --key password --name '<item>' --return-channel
 6. Possível: subir perfis por varredura ou stories se o Marcus pedir; sempre conferir tetos e custo (tudo precisa continuar grátis).
 
 ## Segurança da sessão do Instagram (25/11/2026)
+- Sessão do @mv1thebest caiu (regra do Marcus, 25/11): o robô religa sozinho com as credenciais salvas, sem ficar parado. Login falhou: pausa de 1h e nova tentativa. Challenge/checkpoint: pausa de 2h, com calma, sem martelar. 429: 6h. Avisar o Marcus se pedir ação dele (ex.: aprovar dispositivo no celular).
 - O workflow NÃO guarda mais cache de sessão (repo público: cache de sessão logada é risco). O robô1 só escreve sessão numa pasta temporária da rodada. A sessão do leitor logado (@mv1thebest) vive só na tabela privada ajf_segredos. Estado da descoberta de perfis: ajf_estado, chave ig_descoberta. Nunca reintroduzir actions/cache para sessão, cookie ou storage state.
 - Pendente com o Marcus: apagar os secrets órfãos IG_USERNAME, IG_PASSWORD, IG_TOTP_SECRET do GitHub (app aberto, por causa do sudo).
