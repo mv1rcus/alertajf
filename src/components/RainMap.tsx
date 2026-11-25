@@ -7,6 +7,7 @@ import { reportMediaUrl, type ReportMedia } from "@/lib/reports";
 
 const icons = { alagamento: "🌊", interdicao: "🚧", deslizamento: "⛰", sem_luz: "💡", relato: "📍" };
 const colors = { alagamento: "#137eac", interdicao: "#bc5234", deslizamento: "#a0742a", sem_luz: "#6b5bb5", relato: "#127e86" };
+const SITE = "https://alertajf.vercel.app";
 const RADAR_LEGEND: [string, string, string?][] = [["#6cd1eb", "fraca"], ["#0091ca", "fraca a média"], ["#ffd200", "moderada"], ["#f07a00", "forte"], ["#d8212a", "muito forte"], ["#d94fc0", "extrema", "granizo possível"]];
 
 export default function RainMap({ pontos, showRadar, foco, onPick, selected, radarFrames, rv }: {
@@ -104,6 +105,14 @@ export default function RainMap({ pontos, showRadar, foco, onPick, selected, rad
         }
         popup.append(box);
       }
+      const shareText = `${p.nome}: ${p.descricao}. Compartilhado pelo Alerta JF, projeto independente: ${SITE}/#ocorrencias`;
+      const share = document.createElement("a");
+      share.className = "popup-share";
+      share.textContent = "Compartilhar no WhatsApp";
+      share.href = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      share.target = "_blank"; share.rel = "noopener noreferrer";
+      share.addEventListener("click", (e) => { if (typeof navigator.share === "function") { e.preventDefault(); navigator.share({ text: shareText }).catch(() => {}); } });
+      popup.append(share);
       return popup;
     };
     const seen = new Set<string>();
