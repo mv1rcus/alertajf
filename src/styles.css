@@ -206,26 +206,26 @@
 .leaflet-control-attribution a { color: var(--primary) !important; }
 
 /* Legenda do radar */
-.radar-legend{margin:10px 0;padding:14px 16px;border:1px solid rgba(148,163,184,.22);border-radius:14px;background:linear-gradient(180deg,rgba(30,41,59,.55),rgba(15,23,42,.55));display:grid;gap:10px}
+.radar-legend{margin:10px 0;padding:12px 16px;border:1px solid rgba(148,163,184,.15);border-radius:10px;background:rgba(15,23,42,.35);display:grid;gap:8px}
 .radar-legend-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px}
-.radar-legend-head b{font-size:14px;letter-spacing:.01em}
+.radar-legend-head b{font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;opacity:.85}
 .radar-legend-head span{font-size:12px;opacity:.65}
-.radar-legend-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.12)}
+.radar-legend-bar{display:flex;height:4px;border-radius:2px;overflow:hidden}
 .radar-legend-bar i{flex:1}
-.radar-legend-items{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
-.radar-legend-items li{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.05);font-size:13px;line-height:1.2}
-.radar-legend-items li>i{flex:none;width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.18)}
-.radar-legend-items li span{display:flex;flex-direction:column}
-.radar-legend-items li small{font-size:11px;opacity:.7}
+.radar-legend-items{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:4px 10px}
+.radar-legend-items li{display:flex;align-items:center;gap:7px;padding:1px 0;font-size:12px;line-height:1.25;color:rgba(226,237,244,.72)}
+.radar-legend-items li>i{flex:none;width:8px;height:8px;border-radius:2px;opacity:.9}
+.radar-legend-items li span{display:flex;flex-direction:column;font-weight:400}
+.radar-legend-items li small{font-size:10.5px;opacity:.6}
 .radar-legend-note{margin:0;font-size:11.5px;line-height:1.35;opacity:.65}
 @media (max-width:640px){
-.radar-legend{margin:6px 0;padding:8px 10px;border-radius:12px;gap:6px}
+.radar-legend{margin:6px 0;padding:8px 10px;border-radius:8px;gap:5px}
 .radar-legend-head span{display:none}
-.radar-legend-head b{font-size:13px}
-.radar-legend-bar{height:6px}
-.radar-legend-items{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
-.radar-legend-items li{gap:5px;padding:3px 6px;border-radius:8px;font-size:11.5px}
-.radar-legend-items li>i{width:9px;height:9px;box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+.radar-legend-head b{font-size:11px}
+.radar-legend-bar{height:3px}
+.radar-legend-items{grid-template-columns:repeat(3,minmax(0,1fr));gap:3px 6px}
+.radar-legend-items li{gap:5px;padding:1px 0;font-size:10.5px}
+.radar-legend-items li>i{width:7px;height:7px}
 .radar-legend-items li small{display:none}
 .radar-legend-note{font-size:10.5px;line-height:1.3}
 }
