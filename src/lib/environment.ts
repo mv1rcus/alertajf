@@ -4,6 +4,7 @@ import { escolherEstacaoChuva, normalizarChuva } from "./chuva";
 type RiverPoint = { time: string; cm: number };
 type RainPoint = { time: string; mm: number };
 export type FonteLeitura = { station: string; code: string; onde: string; leituraEm: string };
+export type EstacaoCemaden = { id: string; nome: string; agora: number | null; mm1h: number | null; mm24h: number | null; lidoEm: string };
 export type EnvironmentData = {
   checkedAt: string;
   river: { status: "ok" | "error"; station: string; code: string; onde: string; source: string; readings: RiverPoint[]; fontes: FonteLeitura[] };
@@ -11,10 +12,12 @@ export type EnvironmentData = {
   outrosRios: { rio: string; station: string; code: string; onde: string; leituraEm: string; cm: number | null; tendencia: "subindo" | "descendo" | "estavel" }[];
   alerts: { status: "ok" | "error"; source: string; updated: string; items: { id: string; event: string; level: string; time: string }[] };
   radar: { status: "ok" | "error"; source: string; frames: { time: string; url: string; bbox: number[] }[] };
+  chuvaRegioes: { status: "ok" | "error"; source: string; estacoes: EstacaoCemaden[] };
 };
 let cache: { at: number; data: EnvironmentData } | undefined;
 const ANA = "https://telemetriaws1.ana.gov.br/ServiceANA.asmx/DadosHidrometeorologicos";
 const CEMADEN = "https://painelalertas.cemaden.gov.br/wsAlertas2";
+const CEMADEN_PLUVIO = "https://resources.cemaden.gov.br/graficos/interativo/getJson2.php?uf=MG";
 const RADAR = "https://data.inpe.br/bdc/stac/v1/search";
 
 /** Estações telemétricas da ANA dentro de Juiz de Fora com pluviômetro e nível.
@@ -49,6 +52,7 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     outrosRios: [],
     alerts: { status: "error", source: "https://painelalertas.cemaden.gov.br/", updated: "", items: [] },
     radar: { status: "error", source: "https://data.inpe.br/dados/radares-meteorologicos/", frames: [] },
+    chuvaRegioes: { status: "error", source: "https://resources.cemaden.gov.br/graficos/interativo/", estacoes: [] },
   };
   const candidatosRio: { ordem: number; station: string; code: string; onde: string; url: string; niveis: RiverPoint[] }[] = [];
   const candidatosChuva: { ordem: number; station: string; code: string; onde: string; url: string; leituras: RainPoint[] }[] = [];
@@ -121,6 +125,26 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
       const soJF = (x: Record<string, unknown>) => (String(x["codibge"] ?? "").trim() === "3136702" || semAcento(String(x["municipio"] ?? "")) === "juiz de fora") && String(x["uf"]) === "MG" && x["status"] === 1;
       data.alerts.items = json.alertas.filter(soJF).map((x: Record<string, unknown>) => ({ id: String(x['cod_alerta']), event: String(x['evento']), level: String(x['nivel']), time: String(x['ult_atualizacao']) }));
       data.alerts.status = "ok";
+    })(),
+    // Pluviômetros do Cemaden dentro de JF (codibge 3136702): chuva medida por região.
+    // Acumulados vêm do próprio Cemaden; "-" na fonte vira null (estação sem chuva no período).
+    (async () => {
+      const json = await (await get(CEMADEN_PLUVIO)).json();
+      if (!Array.isArray(json)) throw Error("Formato não reconhecido");
+      const dh = (s: string) => { const m = s.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/); return m ? Date.parse(`20${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:00Z`) : NaN; }; // horário da fonte é UTC
+      const mmNum = (v: unknown) => { const n = Number(String(v ?? "").replace(",", ".")); return Number.isFinite(n) && n >= 0 && n < 1000 ? Math.round(n * 100) / 100 : null; };
+      const estacoes: EstacaoCemaden[] = [];
+      for (const x of json as Record<string, unknown>[]) {
+        if (String(x["codibge"]) !== "3136702" || Number(x["tipoestacao"]) !== 1) continue;
+        const lido = dh(String(x["datahoraUltimovalor"] ?? ""));
+        const nome = String(x["nomeestacao"] ?? "").trim();
+        if (!nome || !Number.isFinite(lido) || lido > Date.now() + 45 * 60000 || Date.now() - lido > 2.5 * 3600000) continue; // tolera relógio da estação adiantado
+        estacoes.push({ id: String(x["idestacao"]), nome, agora: mmNum(x["ultimovalor"]), mm1h: mmNum(x["acc1hr"]), mm24h: mmNum(x["acc24hr"]), lidoEm: new Date(lido).toISOString() });
+      }
+      if (!estacoes.length) throw Error("Sem estação recente");
+      estacoes.sort((a, b) => (b.mm24h ?? -1) - (a.mm24h ?? -1) || a.nome.localeCompare(b.nome, "pt-BR"));
+      data.chuvaRegioes.estacoes = estacoes;
+      data.chuvaRegioes.status = "ok";
     })(),
     (async () => {
       const json = await (await get(radarUrl)).json();
