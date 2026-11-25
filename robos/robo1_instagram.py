@@ -234,7 +234,7 @@ def logar_app(tag=""):
                 continue
             break
     if erro is not None:
-        open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 24 * 3600, tag))
+        open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 1 * 3600, tag))  # regra do Marcus (25/11): relogar em 1h, não ficar parado
         raise FalhaApp("login do app falhou (%s): %s" % (type(erro).__name__, str(erro)[:150]))
     cl.dump_settings(APP_SESSAO)
     return cl
@@ -260,7 +260,7 @@ def candidatos_app(cl, perfis):
                            publicado_em=data.isoformat(), midia_url=str(m.video_url) if video and m.video_url else None,
                            eh_video=bool(video))
         except (ex.ChallengeRequired, ex.FeedbackRequired, ex.LoginRequired, ex.ChallengeError) as e:
-            open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 24 * 3600, TAG_ATUAL))
+            open(APP_BLOQUEIO, "w").write("%s|%s" % (time.time() + 2 * 3600, TAG_ATUAL))  # challenge: pausa curta e tenta de novo (regra do Marcus, 25/11)
             raise FalhaApp("Instagram barrou a conta no meio da leitura (%s)" % type(e).__name__)
         except Exception as e:
             print(f"perfil {nome}: {type(e).__name__}: {str(e)[:120]}")
@@ -382,7 +382,7 @@ def main_browser(cfg, perfis):
     os.makedirs(APP_DIR, exist_ok=True)
     user, senha, seed = os.environ.get("IG_USERNAME"), os.environ.get("IG_PASSWORD"), os.environ.get("IG_TOTP_SECRET")
 
-    def falha(msg, horas=24):
+    def falha(msg, horas=1):  # login do navegador falhou: 1h e tenta de novo (regra do Marcus, 25/11)
         open(WEB_BLOQUEIO, "w").write("%s|%s" % (time.time() + horas * 3600, tag))
         c.log_robo("robo1_instagram", False, f"Instagram (navegador): {msg}")
         open(os.path.join(c.AQUI, "..", ".ig-falhou"), "w").write(msg[:300])
