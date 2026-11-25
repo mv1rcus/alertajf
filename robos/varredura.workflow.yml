@@ -44,11 +44,6 @@ jobs:
       IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
-        with:
-          path: .ig-sessao
-          key: ig-sessao-${{ github.run_id }}
-          restore-keys: ig-sessao-
       - run: pip install --quiet instaloader
       - run: python3 robo1_instagram.py
       - name: Abrir issue se o login do Instagram caiu
