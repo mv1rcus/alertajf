@@ -199,6 +199,21 @@ def _ritmo():
     _ULTIMA[0] = time.time()
 
 
+def _contar(modelo, tipo):
+    """Contador de chamadas ao Gemini por modelo, por dia do Pacífico (a cota diária zera à meia-noite de lá).
+    Fica em ajf_estado.gemini_uso: {dia, modelos: {modelo: {texto, imagem, 429, 503}}}. Tentativas contam, mesmo as que falham."""
+    try:
+        dia = agora().astimezone(dt.timezone(dt.timedelta(hours=-8))).strftime("%Y-%m-%d")
+        u = estado_ler("gemini_uso") or {}
+        if u.get("dia") != dia:
+            u = {"dia": dia, "modelos": {}}
+        m = u["modelos"].setdefault(modelo, {})
+        m[tipo] = m.get(tipo, 0) + 1
+        estado_gravar("gemini_uso", u)
+    except Exception as e:
+        print("contador gemini falhou:", str(e)[:80])
+
+
 def analisar(item, imagem=None):
     """Roda a IA sobre um candidato. Devolve dict de análise (com campo 'valido').
     imagem = (bytes, mime) opcional: o Gemini lê também o texto que aparece dentro da imagem (OCR, mesma cota)."""
@@ -223,7 +238,9 @@ def analisar(item, imagem=None):
     for tentativa in range(5):
         try:
             _ritmo()
-            d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_modelo()}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
+            _m = _modelo()
+            _contar(_m, "imagem" if imagem else "texto")
+            d = http("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{_m}:generateContent?key={GEMINI_KEY}", body=corpo, timeout=60)
             txt = d["candidates"][0]["content"]["parts"][0]["text"]
             return json.loads(txt)
         except RuntimeError as e:
@@ -231,6 +248,8 @@ def analisar(item, imagem=None):
                 _RUINS.add(_modelo())
                 print(f"modelo {_modelo()} indisponível; tentando outro")
                 continue
+            if "HTTP 429" in str(e) or "HTTP 503" in str(e):
+                _contar(_modelo(), "429" if "HTTP 429" in str(e) else "503")
             if "HTTP 429" in str(e):
                 # cada modelo tem a própria cota grátis: marca este como esgotado nesta execução e tenta o próximo da lista
                 print("Gemini 429 no modelo", _modelo(), "|", str(e)[-260:].replace("\n", " "))
