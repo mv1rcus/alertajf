@@ -131,14 +131,14 @@ export const getEnvironment = createServerFn({ method: "GET" }).handler(async ()
     (async () => {
       const json = await (await get(CEMADEN_PLUVIO)).json();
       if (!Array.isArray(json)) throw Error("Formato não reconhecido");
-      const dh = (s: string) => { const m = s.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/); return m ? Date.parse(`20${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:00-03:00`) : NaN; };
+      const dh = (s: string) => { const m = s.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})/); return m ? Date.parse(`20${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:00Z`) : NaN; }; // horário da fonte é UTC
       const mmNum = (v: unknown) => { const n = Number(String(v ?? "").replace(",", ".")); return Number.isFinite(n) && n >= 0 && n < 1000 ? Math.round(n * 100) / 100 : null; };
       const estacoes: EstacaoCemaden[] = [];
       for (const x of json as Record<string, unknown>[]) {
         if (String(x["codibge"]) !== "3136702" || Number(x["tipoestacao"]) !== 1) continue;
         const lido = dh(String(x["datahoraUltimovalor"] ?? ""));
         const nome = String(x["nomeestacao"] ?? "").trim();
-        if (!nome || !Number.isFinite(lido) || lido > Date.now() + 60000 || Date.now() - lido > 2.5 * 3600000) continue;
+        if (!nome || !Number.isFinite(lido) || lido > Date.now() + 45 * 60000 || Date.now() - lido > 2.5 * 3600000) continue; // tolera relógio da estação adiantado
         estacoes.push({ id: String(x["idestacao"]), nome, agora: mmNum(x["ultimovalor"]), mm1h: mmNum(x["acc1hr"]), mm24h: mmNum(x["acc24hr"]), lidoEm: new Date(lido).toISOString() });
       }
       if (!estacoes.length) throw Error("Sem estação recente");
