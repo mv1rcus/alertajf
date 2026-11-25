@@ -12,7 +12,7 @@ export type AlertaDC = {
 
 /** Arquivo atualizado a cada ~10 min pelo workflow "Alertas da Defesa Civil (JF)" (feed IDAP/MIDR). */
 /** Dados ficam na branch "dados" (fora de main) para não gastar deploys da Vercel; cai pro arquivo local se o GitHub falhar. */
-export const URL_DEFESA_CIVIL = "https://raw.githubusercontent.com/mvthebest/alertajf/dados/defesa-civil.json";
+export const URL_DEFESA_CIVIL = "https://raw.githubusercontent.com/mv1rcus/alertajf/dados/defesa-civil.json";
 export const URL_DEFESA_CIVIL_RESERVA = "/defesa-civil.json";
 
 export type RespostaDC = { alerta: AlertaDC | null; fonteAtualizada: string | null };
