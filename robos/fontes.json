@@ -111,6 +111,7 @@
     "stories": {
       "max_perfis": 12,
       "intervalo_min": 60,
+      "filtrar_por_flag": true,
       "teto_dia": 60,
       "teto_mes": 800,
       "logado": {
