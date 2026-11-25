@@ -112,7 +112,11 @@
       "max_perfis": 12,
       "intervalo_min": 60,
       "teto_dia": 60,
-      "teto_mes": 800
+      "teto_mes": 800,
+      "logado": {
+        "ativo": true,
+        "intervalo_min": 20
+      }
     },
     "perfis_fora": {
       "motivo": "24/11: tribunademinas, jfnoticias.com.br e folhajf já vêm pelo RSS (sem cota); acessa.com_ 0 aprovados em 5 posts. Poupa a cota do Scrappa depois de 01/12. Pode voltar a qualquer momento.",
