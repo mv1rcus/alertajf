@@ -131,7 +131,7 @@ def cabecalho_feed(caminho):
 
 def baixar():
     tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False).name
-    subprocess.run(["curl", "-sS", "--fail", "--compressed", "-m", "280", "-A", "alertajf/1.0 (+https://alertajf.vercel.app)", "-o", tmp, FEED], check=True)
+    subprocess.run(["curl", "-sS", "--fail", "--compressed", "--retry", "2", "--retry-all-errors", "--retry-delay", "5", "-m", "110", "-A", "alertajf/1.0 (+https://alertajf.vercel.app)", "-o", tmp, FEED], check=True)
     return tmp
 
 
