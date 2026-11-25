@@ -817,33 +817,46 @@ def main_stories(cfg):
         perfis = [p for p in perfis if flags.get(p, True)]
         if not perfis:
             return 0
-    if u.get("mes") != mes:
-        u.update(mes=mes, usado=0)
-    if u.get("dia") != dia:
-        u.update(dia=dia, dia_usado=0)
-    if time.time() - u.get("ultimo", 0) < st.get("intervalo_min", 30) * 60 - 60:
-        return 0
-    if time.time() < u.get("pausa_ate", 0):
-        print("stories: serviço em pausa")
-        return 0
-    if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
-        c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))
-        return 0
-    u["ultimo"] = time.time()
-    u["usado"] += len(perfis)  # conta antes: se cair no meio, o gasto já está contado
-    u["dia_usado"] += len(perfis)
-    _salvar_uso(uso)
-    try:
-        linhas = _ler_stories_apify(perfis, chave)
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 402, 403, 429):
-            u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
-            _salvar_uso(uso)
-        c.log_robo("robo1_instagram", False, "Stories (apify): HTTP %s" % e.code)
-        return 0
-    except Exception as e:
-        c.log_robo("robo1_instagram", False, "Stories (apify): %s %s" % (type(e).__name__, str(e)[:100]))
-        return 0
+    linhas, via = None, "apify"
+    lg = st.get("logado") or {}
+    if lg.get("ativo"):  # leitor logado (@mv1thebest) primeiro; se falhar ou estiver em pausa, o Apify cobre
+        import ig_logado
+        try:
+            linhas = ig_logado.ler_stories(perfis, lg)
+            via = "logado"
+        except ig_logado.Cedo:
+            return 0
+        except Exception as e:
+            print("stories logado indisponível, usando apify:", type(e).__name__, str(e)[:120])
+            c.log_robo("robo1_instagram", False, "Stories logado falhou, cai pro Apify: %s %s" % (type(e).__name__, str(e)[:100]))
+    if linhas is None:
+        if u.get("mes") != mes:
+            u.update(mes=mes, usado=0)
+        if u.get("dia") != dia:
+            u.update(dia=dia, dia_usado=0)
+        if time.time() - u.get("ultimo", 0) < st.get("intervalo_min", 30) * 60 - 60:
+            return 0
+        if time.time() < u.get("pausa_ate", 0):
+            print("stories: serviço em pausa")
+            return 0
+        if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
+            c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))
+            return 0
+        u["ultimo"] = time.time()
+        u["usado"] += len(perfis)  # conta antes: se cair no meio, o gasto já está contado
+        u["dia_usado"] += len(perfis)
+        _salvar_uso(uso)
+        try:
+            linhas = _ler_stories_apify(perfis, chave)
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 402, 403, 429):
+                u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
+                _salvar_uso(uso)
+            c.log_robo("robo1_instagram", False, "Stories (apify): HTTP %s" % e.code)
+            return 0
+        except Exception as e:
+            c.log_robo("robo1_instagram", False, "Stories (apify): %s %s" % (type(e).__name__, str(e)[:100]))
+            return 0
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     lidos = novos = aprov = 0
     for r in linhas:
@@ -886,8 +899,8 @@ def main_stories(cfg):
             len(certos), len(conhecidos), len(falso_pos), len(falso_neg), len(com_story), v["certos"], v["perfis"]))
     except Exception as e:
         print("validação flag falhou:", type(e).__name__, str(e)[:100])
-    c.log_robo("robo1_instagram", True, "Stories via apify: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (leituras: dia %d/%d, mês %d/%d)" % (
-        len(perfis), lidos, novos, aprov, u["dia_usado"], st.get("teto_dia", 60), u["usado"], st.get("teto_mes", 800)))
+    c.log_robo("robo1_instagram", True, "Stories via %s: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (apify: dia %d/%d, mês %d/%d)" % (
+        via, len(perfis), lidos, novos, aprov, u.get("dia_usado", 0), st.get("teto_dia", 60), u.get("usado", 0), st.get("teto_mes", 800)))
     return 0
 
 
