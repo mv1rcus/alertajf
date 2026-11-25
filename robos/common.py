@@ -5,7 +5,7 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://fnpssjnsljhwdoikfwcu.supa
 PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "sb_publishable_wGdx39fLd5BbXzet5qSOsQ_thFUqn-m")
 SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-JANELA_HORAS = 2  # cada pino dura 2h (mesma janela de expiração dos relatos do site)
+JANELA_HORAS = 2  # janela de ingestão: só entram ocorrências das últimas 2h. A expiração no mapa (5h) é do ajf_submit no banco
 JF_BBOX = (-22.00, -21.52, -43.69, -43.14)  # lat_min, lat_max, lon_min, lon_max: caixa em volta do polígono do município (robos/jf_poligono.json)
 UA = "AlertaJF-robos/1.0 (+https://github.com/mv1rcus/alertajf)"
 try:
