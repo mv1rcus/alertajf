@@ -127,5 +127,10 @@
         "acessa.com_"
       ]
     }
+  },
+  "ocr": {
+    "ativo": true,
+    "max_por_rodada": 6,
+    "max_dia": 60
   }
 }

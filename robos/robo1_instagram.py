@@ -753,11 +753,19 @@ def _main_posts(cfg):
                           url=_link_post(n["shortcode"], nome), legenda=n["legenda"],
                           publicado_em=data.isoformat(), midia_url=n.get("midia"), eh_video=n["video"])
                 lidos += 1
-                if not it["legenda"].strip() and not it["eh_video"]:
+                sem_leg = not it["legenda"].strip()
+                if sem_leg and not (cfg.get("ocr") or {}).get("ativo"):
+                    continue
+                if sem_leg and it["eh_video"] and not it.get("midia_url"):
                     continue
                 if c.ja_na_fila(it):
                     continue
-                a = c.analisar(it)
+                img = None
+                if sem_leg:  # foto/capa sem legenda: o Gemini lê o texto da imagem
+                    img = c.ocr_imagem(cfg, it.get("midia_url") if not it["eh_video"] else None)
+                    if not img:
+                        continue
+                a = c.analisar(it, imagem=img)
                 ok, motivo = c.validar_analise(a)
                 it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
                 if c.fila_inserir(it):
@@ -869,15 +877,23 @@ def main_stories(cfg):
                 continue
             texto = _texto_story(r)
             lidos += 1
-            if not texto:  # a IA só lê texto: story sem legenda/local não dá pra avaliar
+            sem_texto = not texto
+            if sem_texto and not (cfg.get("ocr") or {}).get("ativo"):  # sem OCR a IA só lê texto
                 continue
+            if sem_texto:
+                texto = "(sem legenda; o texto está na imagem)"
             video = (r.get("mediaType") or "") == "video"
             it = dict(origem="instagram", post_id="story-" + str(r["storyId"]), autor=f"@{nome}",
                       url=f"https://www.instagram.com/stories/{nome}/{r['storyId']}/", legenda="(Story de 24h) " + texto,
                       publicado_em=quando.isoformat(), midia_url=(r.get("videoUrl") if video else (r.get("imageUrl") or r.get("mediaUrl"))) or r.get("mediaUrl"), eh_video=video)
             if c.ja_na_fila(it):
                 continue
-            a = c.analisar(it)
+            img = None
+            if sem_texto:  # OCR: o Gemini lê o texto dentro da imagem (capa do vídeo, se for vídeo)
+                img = c.ocr_imagem(cfg, r.get("imageUrl") or r.get("mediaUrl"))
+                if not img:
+                    continue
+            a = c.analisar(it, imagem=img)
             ok, motivo = c.validar_analise(a)
             it.update(analise=a, estado="analisado" if ok else "descartado", motivo=motivo or None)
             if c.fila_inserir(it):

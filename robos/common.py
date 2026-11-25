@@ -199,15 +199,22 @@ def _ritmo():
     _ULTIMA[0] = time.time()
 
 
-def analisar(item):
-    """Roda a IA sobre um candidato. Devolve dict de análise (com campo 'valido')."""
+def analisar(item, imagem=None):
+    """Roda a IA sobre um candidato. Devolve dict de análise (com campo 'valido').
+    imagem = (bytes, mime) opcional: o Gemini lê também o texto que aparece dentro da imagem (OCR, mesma cota)."""
     if not GEMINI_KEY:
         raise RuntimeError("Falta o secret GEMINI_API_KEY")
     dias = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
     br = agora().astimezone(dt.timezone(dt.timedelta(hours=-3)))
     prompt = PROMPT_ANALISE.format(hoje_br=f"{dias[br.weekday()]}, {br.strftime('%d/%m/%Y %H:%M')} (Brasília)", agora=agora().isoformat(timespec="minutes"), autor=item.get("autor", ""),
                                    publicado=item.get("publicado_em") or "desconhecido", legenda=(item.get("legenda") or "")[:3000])
-    corpo = {"contents": [{"parts": [{"text": prompt}]}],
+    partes = [{"text": prompt}]
+    if imagem:
+        partes.append({"inline_data": {"mime_type": imagem[1], "data": __import__("base64").b64encode(imagem[0]).decode()}})
+        partes[0]["text"] += ("\n\nIMAGEM ANEXA: leia o texto que aparece dentro dela (manchete, legenda sobreposta, placa) e use como texto do post. "
+                             "Só vale se esse texto descrever ocorrência real de AGORA em Juiz de Fora com local identificável; "
+                             "foto sem texto útil, print de previsão/alerta ou arte genérica => valido=false.")
+    corpo = {"contents": [{"parts": partes}],
              "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}}
     if _GEMINI_ESGOTADO[0]:
         raise RuntimeError("Gemini esgotado nesta execução (429/503), análise pulada")
@@ -236,6 +243,39 @@ def analisar(item):
             raise
     _GEMINI_ESGOTADO[0] = True  # não gasta o resto do tempo tentando item por item
     raise RuntimeError("Gemini indisponível/limite (429) em todos os modelos tentados")
+
+
+_OCR_RODADA = [0]
+
+
+def ocr_imagem(cfg, url):
+    """Baixa a imagem pra IA ler o texto dela. Devolve (bytes, mime) ou None se desligado, sem cota ou sem imagem.
+    Limites (fontes.json -> ocr): max_por_rodada e max_dia, pra não comer a cota grátis do Gemini."""
+    o = (cfg or {}).get("ocr") or {}
+    if not o.get("ativo") or not url or not GEMINI_KEY or _GEMINI_ESGOTADO[0]:
+        return None
+    if _OCR_RODADA[0] >= o.get("max_por_rodada", 12):
+        return None
+    dia = agora().astimezone(dt.timezone(dt.timedelta(hours=-3))).strftime("%Y-%m-%d")
+    uso = estado_ler("ocr_uso") or {}
+    if uso.get("dia") != dia:
+        uso = {"dia": dia, "n": 0}
+    if uso["n"] >= o.get("max_dia", 150):
+        return None
+    try:
+        b = http("GET", url, {"Referer": "https://www.instagram.com/"}, timeout=30, raw=True)
+    except Exception as e:
+        print("ocr: imagem não baixou:", str(e)[:100])
+        return None
+    if not b or len(b) > 4_000_000:
+        return None
+    mime = "image/jpeg" if b[:3] == b"\xff\xd8\xff" else "image/png" if b[:8] == b"\x89PNG\r\n\x1a\n" else "image/webp" if b[:4] == b"RIFF" and b[8:12] == b"WEBP" else None
+    if not mime:
+        return None
+    _OCR_RODADA[0] += 1
+    uso["n"] += 1  # conta antes da chamada: se cair no meio, o gasto já está contado
+    estado_gravar("ocr_uso", uso)
+    return (b, mime)
 
 
 def validar_analise(a):
