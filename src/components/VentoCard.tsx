@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Share2 } from "lucide-react";
+import { Fresco } from "@/components/Fresco";
 
 type Hora = { h: string; raj: number };
 type Vento = { vel: number; raj: number; dir: number; agora: string; horas: Hora[] };
@@ -59,7 +60,7 @@ export function VentoCard() {
   const tocar = (e: { preventDefault: () => void }) => { if (typeof navigator.share === "function") { e.preventDefault(); navigator.share({ text: texto }).catch(() => {}); } };
   return (
     <article className="card env-card">
-      <div className="eyebrow">VENTO · OPEN-METEO (MODELO)</div>
+      <div className="eyebrow">VENTO · OPEN-METEO (MODELO)<Fresco ts={v && !erro ? v.agora : null}/></div>
       <h3>Vento e rajadas em Juiz de Fora</h3>
       <strong className="big-number alert-text">{ok ? `${Math.round(v.vel)} km/h` : "Sem consulta"}</strong>
       {ok ? (
