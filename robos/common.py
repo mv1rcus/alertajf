@@ -28,14 +28,24 @@ def http(method, url, headers=None, body=None, timeout=40, raw=False):
     data = body if isinstance(body, (bytes, type(None))) else json.dumps(body).encode()
     if isinstance(body, (dict, list)):
         h.setdefault("Content-Type", "application/json")
-    req = urllib.request.Request(url, data=data, headers=h, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            out = r.read()
-            return out if raw else (json.loads(out) if out else None)
-    except urllib.error.HTTPError as e:
-        corpo = e.read().decode("utf-8", "replace")[:500]
-        raise RuntimeError(f"HTTP {e.code} em {method} {url.split('?')[0]}: {corpo}")
+    for tentativa in range(3):
+        req = urllib.request.Request(url, data=data, headers=h, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                out = r.read()
+                return out if raw else (json.loads(out) if out else None)
+        except urllib.error.HTTPError as e:
+            corpo = e.read().decode("utf-8", "replace")[:500]
+            erro = RuntimeError(f"HTTP {e.code} em {method} {url.split('?')[0]}: {corpo}")
+            if e.code < 500 or tentativa == 2:
+                raise erro
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            erro = RuntimeError(f"Falha de rede em {method} {url.split('?')[0]}: {e}")
+            if tentativa == 2:
+                raise erro
+        espera = 4 * (tentativa + 1)
+        print(f"[http] tentativa {tentativa + 1} falhou, tentando de novo em {espera}s: {erro}")
+        time.sleep(espera)
 
 
 # ---------- fila (Supabase, service role) ----------
