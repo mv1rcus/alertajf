@@ -618,6 +618,9 @@ def _video_do_embed(codigo):
     return _desescapar(m.group(1)) if m else None
 
 
+FLAGS_STORY = {}  # perfil -> has_public_story visto no embed nesta execução
+
+
 def _ler_embed(nome, chave):
     """Leitor PRÓPRIO, sem login e sem serviço de terceiros: a página pública de embed do perfil
     (instagram.com/<perfil>/embed/) traz as 6 postagens mais recentes (legenda, hora, foto). Vídeo: página de embed do post.
@@ -627,6 +630,8 @@ def _ler_embed(nome, chave):
     if not m:
         raise RuntimeError("embed sem contextJSON (muro de login ou formato novo)")
     ctx = json.loads(json.loads('"' + m.group(1) + '"')).get("context") or {}
+    if "has_public_story" in ctx:  # sinal grátis de story; a validação contra o Apify decide se vale usar (ver main_stories)
+        FLAGS_STORY[nome] = bool(ctx["has_public_story"])
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     out = []
     for g in ctx.get("graphql_media") or []:
@@ -806,6 +811,12 @@ def main_stories(cfg):
     mes, dia = agora.strftime("%Y-%m"), agora.strftime("%Y-%m-%d")
     uso = _uso()
     u = uso.setdefault("stories", {})
+    flags = u.setdefault("flags", {})
+    flags.update(FLAGS_STORY)
+    if st.get("filtrar_por_flag"):  # desligado por padrão: só liga depois da validação (flag discrimina story ativo)
+        perfis = [p for p in perfis if flags.get(p, True)]
+        if not perfis:
+            return 0
     if u.get("mes") != mes:
         u.update(mes=mes, usado=0)
     if u.get("dia") != dia:
@@ -861,6 +872,20 @@ def main_stories(cfg):
                 aprov += ok
         except Exception as e:
             print("story falhou:", r.get("storyId"), e)
+    try:  # validação do sinal has_public_story do embed contra o resultado real do Apify (só registra)
+        com_story = {r.get("username") for r in linhas if r.get("status") == "success" and r.get("storyId")}
+        conhecidos = [p for p in perfis if p in flags]
+        certos = [p for p in conhecidos if flags[p] == (p in com_story)]
+        falso_pos = [p for p in conhecidos if flags[p] and p not in com_story]
+        falso_neg = [p for p in conhecidos if not flags[p] and p in com_story]
+        v = u.setdefault("validacao", {"leituras": 0, "perfis": 0, "certos": 0, "falso_pos": 0, "falso_neg": 0})
+        v["leituras"] += 1; v["perfis"] += len(conhecidos); v["certos"] += len(certos)
+        v["falso_pos"] += len(falso_pos); v["falso_neg"] += len(falso_neg)
+        _salvar_uso(uso)
+        c.log_robo("robo1_instagram", True, "Validação has_public_story: %d/%d perfis batem com o Apify (flag true sem story: %d, flag false com story: %d; com story agora: %d; acumulado %d/%d)" % (
+            len(certos), len(conhecidos), len(falso_pos), len(falso_neg), len(com_story), v["certos"], v["perfis"]))
+    except Exception as e:
+        print("validação flag falhou:", type(e).__name__, str(e)[:100])
     c.log_robo("robo1_instagram", True, "Stories via apify: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (leituras: dia %d/%d, mês %d/%d)" % (
         len(perfis), lidos, novos, aprov, u["dia_usado"], st.get("teto_dia", 60), u["usado"], st.get("teto_mes", 800)))
     return 0
