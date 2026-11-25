@@ -11,6 +11,7 @@ export type Aviso = {
   cor: string;
   inicio: string;
   fim: string;
+  fimTs: number | null;
   riscos: string;
   instrucoes: string[];
 };
@@ -30,6 +31,14 @@ function itens(v: unknown): string[] {
 function dataBr(s: unknown): string {
   const m = String(s ?? "").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
   return m ? `${m[3]}/${m[2]} ${m[4]}:${m[5]}` : String(s ?? "");
+}
+
+/** Timestamp do fim do aviso (horário de Brasília). null se a data vier fora do formato. */
+function fimTs(s: unknown): number | null {
+  const m = String(s ?? "").match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00-03:00`);
+  return Number.isFinite(t) ? t : null;
 }
 
 /** Avisos oficiais do INMET (hoje e próximos dias) que valem para Juiz de Fora. */
@@ -54,6 +63,7 @@ export async function buscarAvisos(): Promise<Aviso[]> {
       cor: String(a["aviso_cor"] ?? "#FFFE00"),
       inicio: dataBr(a["inicio"]),
       fim: dataBr(a["fim"]),
+      fimTs: fimTs(a["fim"]),
       riscos: itens(a["riscos"]).join(" "),
       instrucoes: itens(a["instrucoes"]),
     });
