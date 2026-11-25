@@ -1,66 +1,72 @@
-# Operação do AlertaJF (a bíblia para quem assumir)
+# Guia de operação do AlertaJF
 
-Escrito em 24/11/2026. Contém só nomes de itens do cofre, nunca valores. Sempre confira o estado ao vivo antes de agir.
+Documento de referência para manutenção humana. Descreve a arquitetura e práticas observadas no projeto; detalhes operacionais podem mudar e devem ser confirmados nas configurações e serviços atuais antes de uma manutenção. Este arquivo não substitui revisão, aprovação ou autorização para alterações.
 
-## 1. O que é
-Site de alerta de chuva de Juiz de Fora: https://alertajf.vercel.app. Repo público github.com/mv1rcus/alertajf (sincronizado com o Lovable), Vercel Hobby (grátis), Supabase grátis (projeto fnpssjnsljhwdoikfwcu). Quatro robôs publicam ocorrências no mapa.
+## 1. Projeto
 
-## 2. Regras duras do Marcus
-- Só ferramentas grátis. Avisar qualquer coisa que possa custar. Cadastro que pedir cartão ou endereço de cobrança: parar, preencher nada, avisar o agente principal (Main).
-- Publicar só ocorrência real de chuva AGORA em JF, com local identificado. Descartar foto genérica de céu e imagem de alerta.
-- Mídia: vídeo H.264/AAC mp4; foto JPEG (bucket relatos-midia).
-- Crédito da fonte sempre visível, marcado "Não verificado". Cada pin dura 2 h. Nunca forçar pin público para teste.
-- Os robôs acordam com chuva confirmada (>= 0,3 mm na última hora, Open-Meteo) ou previsão chegando.
-- Autoria de commit: só mv1rcus, sem co-autor.
-- O robô NUNCA loga no Instagram, não segue, não curte, não posta. Nada de trocar senha do Instagram.
-- Qualquer conta nova, segredo ou código de verificação por telefone/email: confirmar com Main ANTES, agrupar os pedidos de código, avisar Main antes de pedir ao Marcus.
-- Marcus quer relatório curto em português, separando jobs, candidatos e pins. Reconhecer erro próprio.
+O AlertaJF é um site independente de alertas de chuva, alagamentos e deslizamentos em Juiz de Fora: https://alertajf.vercel.app. O repositório público é `mv1rcus/alertajf`; o projeto usa Vercel, Supabase e workflows do GitHub Actions.
 
-## 3. Os 4 robôs (pasta robos/)
-- Robô 1, robo1_instagram.py: Instagram. Posts: leitor próprio por embed público (principal) e serviços de terceiros como reserva. Stories: Apify. A IA lê só texto.
-- Robô 2, robo2_noticias.py: Google News e RSS locais.
-- Robô 3, robo3_baixar.py: baixa e converte a mídia.
-- Robô 4, robo4_publicar.py: publica (fila ajf_fila para pins).
-- portao.py: portão de chuva (só Open-Meteo). Previsão sozinha abre o portão.
-- Configuração: robos/fontes.json (perfis, tetos, intervalos, ordem das reservas). common.py: utilidades, estado, IA (Gemini).
-- scripts/defesa_civil.py: alertas da Defesa Civil (workflow defesa-civil.yml).
+## 2. Comportamento do mapa
 
-## 4. Gatilhos e agenda
-- varredura.yml (workflow_dispatch + cron reserva). O gatilho real é o cron-job.org, job 8935035, a cada 10 min (o comentário no workflow ainda diz 15). Defesa Civil: cron-job.org a cada 10 min.
-- Robô 1 serviços: perfis_por_varredura 9, intervalo_min 15 (cada um dos 12 perfis relido em ~27 min com chuva). Stories: 12 perfis, a cada 60 min.
-- diag-embed.yml: workflow manual só de leitura para testar o embed do IP do GitHub.
+- Os relatos publicados devem corresponder a uma ocorrência de chuva em Juiz de Fora com local identificável. Imagens genéricas de céu e imagens de alertas não são evidência de uma ocorrência local.
+- Pins exibem a fonte e a indicação “Não verificado”. A duração configurada é de 2 horas.
+- Testes não devem criar relatos públicos.
+- A mídia de relatos é preparada como MP4 (H.264/AAC) ou JPEG, conforme o tipo de arquivo.
+- O portão de chuva usa dados do Open-Meteo. A configuração atual fica no código do projeto; confira-a antes de interpretar por que uma execução prosseguiu ou parou.
 
-## 5. Instagram, estado dos leitores
-12 perfis em fontes.json servicos.perfis: transitojuizdefora, jfdepressao, noticiasjf1, luismar.tv, jfdepressao02, jfnoticias.com.br, eucurtojf, matheusbrumjornalista, acessa.com_, mgbron_line_, folhajf, tribunademinas.
-- embed (principal, grátis, sem cota): instagram.com/<perfil>/embed/ traz os 6 posts mais recentes (contextJSON). O mp4 vem de instagram.com/p/<código>/embed/captioned/ (video_url). Usar User-Agent simples ("Mozilla/5.0"); com UA de navegador completo vem outra página sem video_url. Se falhar em todos os perfis (401/403/429), o embed pausa 1 h e os terceiros assumem sozinhos. Testado do IP da AWS e de um runner do GitHub (HTTP 200).
-- Reservas (planos grátis, tetos em fontes.json servicos.teto): Scrappa (450/mês, 25/dia), maviapi (1500/mês, 60/dia, vale até 2026-12-01), herascrape (2400, 25/dia), SocialTap (100 únicos), CreatorCrawl (50 únicos). api.sh: conta criada e chave testada (1.000 créditos/mês, `fresh` custa 1 crédito igual), NÃO ligado no robô.
-- Stories: Apify (ator lance_api/instagram-stories-scraper-api), cobra por perfil lido, teto 60/dia e 800/mês (o crédito grátis real pode ser ~700 leituras). Sem login, não existe leitura grátis ilimitada de story (testado: página de stories pede login; espelhos usam contas por trás).
-- Estado e uso: ajf_estado, chave robo1_uso.
-- Removido a pedido do Marcus: Bright Data (o segredo BRIGHTDATA_KEY ainda existe no GitHub, inofensivo; apagar com o Marcus com o app GitHub aberto por causa do sudo).
+## 3. Componentes
 
-## 6. Cofre (nomes dos itens, valores nunca)
-GitHub PAT alertajf (instinct) · GitHub mv1rcus · Supabase access token alertajf · Supabase alertajf database · Gemini API key alertajf-varredura · Apify API token (AlertaJF) · Scrappa API key (AlertaJF) · herascrape API key AlertaJF · maviapi API key AlertaJF · SocialTap API key AlertaJF · CreatorCrawl API key AlertaJF · api.sh API key (AlertaJF) e api.sh (AlertaJF, Agent Mail) · cron-job.org (AlertaJF, Agent Mail) · GitHub PAT alertajf-defesa-civil-cron (cron-job.org) · Vercel via GitHub mv1rcus · Lovable · Instagram (chuvas JF) e Instagram (robô JF, conta nova) (o robô NÃO usa).
-Receita: `tools vault write-file --key password --name '<item>' --return-channel none --json` devolve um caminho; ler com $(cat caminho) no mesmo comando, nunca imprimir, apagar a pasta do cofre depois. Itens criados por agente começam sem acesso do sandbox: pedir o link de aprovação via Main. O email do agente (xitik2@mail.instinct.com) recebe os códigos de cadastro.
+- `robos/robo1_instagram.py`: leitura de posts públicos incorporados e leitura de stories por provedor configurado.
+- `robos/robo2_noticias.py`: busca em Google News e feeds RSS locais.
+- `robos/robo3_baixar.py`: obtenção e conversão da mídia selecionada.
+- `robos/robo4_publicar.py`: processamento da fila de ocorrências.
+- `robos/portao.py`: avaliação das condições de chuva.
+- `robos/fontes.json`: fontes, limites e intervalos dos leitores.
+- `robos/common.py`: funções compartilhadas, estado e integração de IA.
+- `scripts/defesa_civil.py` e o workflow `defesa-civil.yml`: atualização dos alertas da Defesa Civil.
 
-## 7. Como publicar mudanças
-- Código do robô (robos/, scripts/, docs/): commit como mv1rcus (`git -c user.name=mv1rcus -c user.email=68456420+mv1rcus@users.noreply.github.com commit`), push da branch com o PAT (cabeçalho Authorization Basic de x-access-token:TOKEN), abrir o PR pelo navegador na nuvem (config-h, github.com: https://github.com/mv1rcus/alertajf/compare/main...BRANCH?expand=1, "Create pull request"), mergear pela API (PUT /pulls/N/merge, squash). O PAT não cria PR, não edita workflow, segredo nem issue: isso vai pelo navegador, e mexer em segredo dispara confirmação no GitHub Mobile do Marcus (avisar Main antes, os dígitos valem ~1 min).
-- Visual/front-end (src/): só com ok do Marcus por PR, repassado por Main. A cota de deploy da Vercel Hobby acaba até ~11h de 25/11; mudanças só de robos/ e scripts/ não gastam deploy.
-- Depois de cada lease de navegador: `tools cloud_browser report --outcome` por site.
+## 4. Agenda e frequência
 
-## 8. Prova de saúde
-- Runs: https://api.github.com/repos/mv1rcus/alertajf/actions/workflows/varredura.yml/runs?per_page=8 (público; logs exigem o PAT).
-- Supabase (API de gestão, POST /v1/projects/fnpssjnsljhwdoikfwcu/database/query): tabelas public.ajf_robos_log, public.ajf_fila, public.ajf_estado, ajf_private.reports (pins), ajf_private.reactions.
-- Sem chuva o robô só registra "poupando a cota grátis": isso é normal.
+A configuração registrada em 24/11/2026 indicava execução de varredura e atualização da Defesa Civil a cada 10 minutos pelo cron-job.org, com workflows do GitHub Actions como destino. O arquivo de workflow `varredura.yml` também contém um agendamento de reserva.
 
-## 9. Pendências em aberto (24/11 noite)
-1. Validar o campo has_public_story do embed contra o Apify (o robô já grava a linha "Validação has_public_story" no ajf_robos_log na primeira chuva). Se o campo discriminar story ativo, ligar stories.filtrar_por_flag em fontes.json (PR de 1 linha). Se não, não adianta.
-2. Primeira varredura com chuva real: ler o log do embed e confirmar que saem pins.
-3. Depois do deploy da Vercel (~11h de 25/11): conferir a legenda do radar a 390 px.
-4. Apagar o secret BRIGHTDATA_KEY (com o Marcus). Corrigir o comentário "15 min" do varredura.yml (só pelo navegador).
-5. Retestar de vez em quando os espelhos de stories (storiesfly, insnoop, insmask, imginn, picuki, greatfon, storiesig, anonyig e novos). Aprovar só se aguentar leitura automatizada sem login, sem chave e sem anúncio por 2 dias seguidos. Em 24/11: imginn, picuki, greatfon dão 403 do Cloudflare; storiesig.info e anonyig bloqueiam nosso IP; os outros só funcionam pelo navegador.
-6. Possível: subir perfis por varredura ou stories se o Marcus pedir; sempre conferir tetos e custo (tudo precisa continuar grátis).
+Na configuração então registrada, o leitor de serviços processava 9 perfis por varredura, com intervalo de 15 minutos; 12 perfis eram revisitados em aproximadamente 27 minutos durante chuva. A leitura de stories era programada para 12 perfis a cada 60 minutos. Esses valores são um retrato, não garantia do estado atual. Confirme as configurações em `robos/fontes.json`, nos workflows e no agendador antes de diagnosticar atrasos.
 
-## Segurança da sessão do Instagram (25/11/2026)
-- Sessão do @mv1thebest caiu (regra do Marcus, 25/11): o robô religa sozinho com as credenciais salvas, sem ficar parado. Login falhou: pausa de 1h e nova tentativa. Challenge/checkpoint: pausa de 2h, com calma, sem martelar. 429: 6h. Avisar o Marcus se pedir ação dele (ex.: aprovar dispositivo no celular).
-- O workflow NÃO guarda mais cache de sessão (repo público: cache de sessão logada é risco). O robô1 só escreve sessão numa pasta temporária da rodada. A sessão do leitor logado (@mv1thebest) vive só na tabela privada ajf_segredos. Estado da descoberta de perfis: ajf_estado, chave ig_descoberta. Nunca reintroduzir actions/cache para sessão, cookie ou storage state.
-- Pendente com o Marcus: apagar os secrets órfãos IG_USERNAME, IG_PASSWORD, IG_TOTP_SECRET do GitHub (app aberto, por causa do sudo).
+`diag-embed.yml` é um workflow manual de diagnóstico do leitor de embeds. Seu objetivo é apenas verificar a resposta pública do embed.
+
+## 5. Leitores e limites de provedores
+
+O leitor principal de posts usa embeds públicos do Instagram. Provedores externos estão configurados como alternativas quando a fonte principal falha. Stories dependem de um provedor externo e podem consumir cota; disponibilidade, limites e custos mudam conforme o plano do serviço.
+
+Antes de alterar fontes, intervalos ou provedores, confira `robos/fontes.json` e os termos, preços e limites atuais do serviço. O projeto deve continuar dentro dos planos aprovados e sem custos inesperados. Se houver cobrança, exigência de cartão ou mudança de plano, interrompa essa alteração e obtenha aprovação explícita antes de prosseguir.
+
+O estado e os contadores dos leitores são mantidos no banco do projeto. Use os painéis e consultas já aprovados para manutenção; não inclua dados de acesso, respostas de autenticação ou conteúdo privado em documentação, issues, commits ou logs.
+
+## 6. Segurança e privacidade
+
+- O repositório é público. Não registre nele senhas, tokens, chaves, códigos de verificação, cookies, sessões autenticadas ou dados privados.
+- A configuração do workflow não deve persistir cookies ou estado de sessão de navegador em cache.
+- Os leitores públicos devem preferir fontes acessíveis sem autenticação. Qualquer necessidade nova de autenticação, conta ou acesso deve passar pelo processo de aprovação apropriado e pelo armazenamento seguro já adotado para o projeto.
+- Não automatize login, troca de senha, interação social ou publicação em contas pessoais como parte do leitor de fontes.
+- Para um segredo exposto ou suspeita de acesso indevido, preserve o registro do incidente e encaminhe a um mantenedor autorizado para resposta pelo canal seguro. Não copie o segredo para relatórios.
+
+## 7. Diagnóstico
+
+Para investigar uma execução:
+
+1. Confira no GitHub Actions o horário, o workflow, o resultado e o resumo da execução.
+2. Compare o horário com a agenda atual do cron-job.org e com as configurações atuais dos leitores.
+3. Diferencie falha de fonte, limite de provedor, portão de chuva fechado e ausência de candidato válido.
+4. Confirme no painel do projeto o estado da fila e os registros de execução, usando apenas o acesso autorizado já disponível.
+5. Antes de concluir que uma ocorrência foi publicada, confira o mapa público e a fonte exibida no pin.
+
+Em períodos sem chuva, uma execução sem publicação pode ser normal. Um resultado sem pin, por si só, não comprova falha.
+
+## 8. Alterações no projeto
+
+Para uma mudança de código ou documentação, trabalhe em uma branch separada, faça a revisão e os testes pertinentes e abra um pull request para `main`. Descreva o escopo e os resultados dos testes. Não faça merge até a revisão e aprovação exigidas para aquela mudança. Alterações em `src/` podem iniciar um deploy; mudanças em `robos/`, `scripts/` e `docs/` normalmente não alteram a interface, mas confirme o comportamento atual dos workflows e da hospedagem.
+
+Use os fluxos seguros e aprovados de GitHub, Vercel e Supabase. Não coloque credenciais em comandos copiados para documentação, no histórico do shell ou em registros de execução. Para mudanças de configuração que possam gerar custo ou afetar dados públicos, apresente o impacto e obtenha aprovação antes de aplicá-las.
+
+## 9. Verificação após manutenção
+
+Depois de uma alteração, confirme o resultado no serviço correspondente: execução do workflow, estado do leitor, fila de ocorrências e visualização pública do site. Registre um resumo curto em português, separando execuções, candidatos e pins, e indique claramente qualquer falha ou incerteza.
