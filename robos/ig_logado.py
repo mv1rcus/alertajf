@@ -142,9 +142,10 @@ def ler_stories(perfis, cfg):
             _login(cl, seg)
         alvo = _ids(cl, perfis, est)
         nome_por_id = {str(i): n for n, i in alvo}
+        from requests.exceptions import TooManyRedirects
         try:
             reels = _lote(cl, [i for _, i in alvo])
-        except ex.LoginRequired:  # sessão caiu: um único login novo
+        except (ex.LoginRequired, TooManyRedirects):  # sessão caiu ou presa em loop de redirect: um único login novo
             _login(cl, seg)
             reels = _lote(cl, [i for _, i in alvo])
         seg["sessao"] = cl.get_settings()
@@ -173,4 +174,6 @@ def ler_stories(perfis, cfg):
     except Falha:
         raise
     except Exception as e:
+        if type(e).__name__ == "TooManyRedirects":
+            _pausar(est, 1, type(e).__name__)  # loop de redirect mesmo após login novo: respira 1h, Apify cobre
         raise Falha("%s %s" % (type(e).__name__, str(e)[:100]))
