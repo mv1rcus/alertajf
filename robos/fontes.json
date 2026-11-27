@@ -117,7 +117,8 @@
       "logado": {
         "ativo": true,
         "intervalo_min": 20
-      }
+      },
+      "intervalo_calmaria_min": 720
     },
     "perfis_fora": {
       "motivo": "24/11: tribunademinas, jfnoticias.com.br e folhajf já vêm pelo RSS (sem cota); acessa.com_ 0 aprovados em 5 posts. Poupa a cota do Scrappa depois de 01/12. Pode voltar a qualquer momento.",

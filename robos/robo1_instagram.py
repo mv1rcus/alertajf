@@ -811,12 +811,14 @@ def _texto_story(r):
 
 
 def main_stories(cfg):
-    """Stories dos perfis prioritários (só o Apify lê story ativo no plano grátis). Só com chuva confirmada,
-    a cada 30 min, teto de leituras por dia e por mês gravado no estado, pausa em 402/403/429. Story vira candidato igual post."""
+    """Stories dos perfis prioritários (só o Apify lê story ativo no plano grátis). Com chuva confirmada a cada
+    intervalo_min; na calmaria a cada intervalo_calmaria_min (cobertura rala pra estourar cota, regra 27/11).
+    Teto de leituras por dia e por mês gravado no estado, pausa em 402/403/429. Story vira candidato igual post."""
     st = cfg.get("servicos", {}).get("stories")
     chave = os.environ.get("APIFY_TOKEN")
-    if not st or not chave or not c.chuva_confirmada():
+    if not st or not chave:
         return 0
+    confirmada = c.chuva_confirmada()  # chuva medida na última hora: cadência cheia; senão, rala
     perfis = (st.get("perfis") or cfg["servicos"].get("perfis") or [])[:st.get("max_perfis", 8)]
     agora = dt.datetime.now(dt.timezone.utc)
     mes, dia = agora.strftime("%Y-%m"), agora.strftime("%Y-%m-%d")
@@ -845,7 +847,8 @@ def main_stories(cfg):
             u.update(mes=mes, usado=0)
         if u.get("dia") != dia:
             u.update(dia=dia, dia_usado=0)
-        if time.time() - u.get("ultimo", 0) < st.get("intervalo_min", 30) * 60 - 60:
+        intervalo = st.get("intervalo_min", 30) if confirmada else st.get("intervalo_calmaria_min", 720)
+        if time.time() - u.get("ultimo", 0) < intervalo * 60 - 60:
             return 0
         if time.time() < u.get("pausa_ate", 0):
             print("stories: serviço em pausa")
