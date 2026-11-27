@@ -124,6 +124,8 @@ def _linha(r, nome_por_id):
 
 def ler_stories(perfis, cfg):
     est = c.estado_ler(CHAVE_EST) or {}
+    if est.get("desistir"):
+        raise Falha("conta aposentada (regra do Marcus)")  # Marcus mandou desistir da @mv1thebest: Apify cobre ate a conta nova
     if time.time() < est.get("pausa_ate", 0):
         raise Falha("em pausa (%s)" % est.get("motivo", ""))  # pausado: deixa o Apify cobrir
     if time.time() - est.get("ultimo", 0) < cfg.get("intervalo_min", 20) * 60 - 60:
