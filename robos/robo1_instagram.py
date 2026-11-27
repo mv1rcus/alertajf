@@ -869,6 +869,8 @@ def main_stories(cfg):
             return 0
     linhas, via = None, "apify"
     lg = st.get("logado") or {}
+    if lg.get("ativo") and (c.estado_ler("ig_logado") or {}).get("desistir"):
+        lg = {}  # conta aposentada por regra do Marcus: nem tenta, vai direto pro hera/Apify sem sujar o log
     if lg.get("ativo"):  # leitor logado (@mv1thebest) primeiro; se falhar ou estiver em pausa, o Apify cobre
         import ig_logado
         try:
