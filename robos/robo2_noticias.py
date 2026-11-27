@@ -1,5 +1,5 @@
 """ROBÔ 2: varre o Google Notícias (RSS, sem login) e links de Instagram citados, analisa com IA e enfileira."""
-import json, os, re, sys, urllib.parse, datetime as dt, email.utils
+import json, os, re, sys, urllib.parse, datetime as dt, email.utils, html as html_lib
 import xml.etree.ElementTree as ET
 import common as c
 
@@ -65,6 +65,33 @@ def feed_local(nome, url):
         yield dict(titulo=titulo, link=(i.findtext("link") or ""), data=i.findtext("pubDate"), resumo=resumo, fonte=nome, imagem=imagem_do_item(i))
 
 
+def feed_telegram(nome, url):
+    """Canal publico de Telegram lido pela pagina web (t.me/s/<canal>), sem login e sem cota.
+    So entram mensagens com palavra de chuva; o filtro pesado fica com a IA como nos outros feeds."""
+    doc = c.http("GET", url, raw=True, timeout=40).decode("utf-8", "replace")
+    for parte in re.split(r'(?=data-post=")', doc):
+        m = re.match(r'data-post="([A-Za-z0-9_]+)/(\d+)"', parte)
+        if not m:
+            continue
+        canal, num = m.group(1), m.group(2)
+        t = re.search(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', parte, re.S)
+        texto = re.sub(r"<[^>]+>", " ", t.group(1)) if t else ""
+        texto = html_lib.unescape(re.sub(r"\s+", " ", texto)).strip()
+        if not texto or not PALAVRAS.search(texto):
+            continue
+        d = re.search(r'<time datetime="([^"]+)"', parte)
+        if not d:
+            continue
+        try:
+            pub = dt.datetime.fromisoformat(d.group(1)).astimezone(dt.timezone.utc)
+        except ValueError:
+            continue
+        img = re.search(r"background-image:url\('([^']+)'\)", parte)
+        yield dict(titulo=texto[:180], link="https://t.me/%s/%s" % (canal, num),
+                   data=email.utils.format_datetime(pub), resumo=texto, fonte=nome,
+                   imagem=(img.group(1) if img else ""))
+
+
 def main():
     if not c.portao_aberto():
         c.log_robo("robo2_noticias", True, "sem chuva nem previsão, dormindo")
@@ -76,6 +103,7 @@ def main():
     fim = c.agora() + dt.timedelta(minutes=9)  # orçamento de tempo do robô
     fontes_feed = [(b, lambda b=b: feed(b)) for b in buscas]
     fontes_feed += [(nome, lambda n=nome, u=url: feed_local(n, u)) for nome, url in fontes.get("rss_locais", [])]
+    fontes_feed += [(nome, lambda n=nome, u=url: feed_telegram(n, u)) for nome, url in fontes.get("telegram_canais", [])]
     for b, gerar in fontes_feed:
         try:
             itens = list(gerar())

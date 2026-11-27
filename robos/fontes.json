@@ -65,7 +65,14 @@
       "acessa.com_",
       "mgbron_line_",
       "folhajf",
-      "tribunademinas"
+      "tribunademinas",
+      "juizdeforadiario",
+      "tempoeclimajf",
+      "jf360oficial",
+      "jfinforma",
+      "plantaojuizdeforaoficial",
+      "rcwtv",
+      "alertajf"
     ],
     "perfis_por_varredura": 9,
     "intervalo_min": 15,
@@ -109,7 +116,7 @@
       }
     },
     "stories": {
-      "max_perfis": 12,
+      "max_perfis": 20,
       "intervalo_min": 60,
       "filtrar_por_flag": true,
       "teto_dia": 60,
@@ -118,7 +125,12 @@
         "ativo": true,
         "intervalo_min": 20
       },
-      "intervalo_calmaria_min": 720
+      "intervalo_calmaria_min": 720,
+      "hera": {
+        "ativo": true,
+        "teto_dia": 114,
+        "teto_total": 2400
+      }
     },
     "perfis_fora": {
       "motivo": "24/11: tribunademinas, jfnoticias.com.br e folhajf já vêm pelo RSS (sem cota); acessa.com_ 0 aprovados em 5 posts. Poupa a cota do Scrappa depois de 01/12. Pode voltar a qualquer momento.",
@@ -134,5 +146,11 @@
     "ativo": true,
     "max_por_rodada": 6,
     "max_dia": 60
-  }
+  },
+  "telegram_canais": [
+    [
+      "JFNews",
+      "https://t.me/s/JFNews"
+    ]
+  ]
 }

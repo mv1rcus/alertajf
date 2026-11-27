@@ -803,6 +803,43 @@ def _ler_stories_apify(nomes, chave):
                       {"Authorization": "Bearer " + chave}, {"usernames": nomes, "includeFullStoryData": True}, 150)
 
 
+def _ler_stories_hera(nomes, chave):
+    """herascrape: 1 chamada por perfil (bandeja de stories ativos, 24h). Saldo pre-pago (~2.500 chamadas, NAO renova:
+    acabou, acabou — por isso o teto_total interno). Mesmo formato de linha do Apify. pk do perfil fica no estado
+    herascrape_ids (o leitor de posts ja resolveu a maioria)."""
+    h = {"X-Api-Key": chave}
+    ids = c.estado_ler("herascrape_ids")
+    ids = ids if isinstance(ids, dict) else {}
+    mudou = False
+    out = []
+    for nome in nomes:
+        if nome not in ids:
+            d = _post_json("https://api.herascrape.com/users/username/" + urllib.parse.quote(nome), h, None, 60)
+            pk = (d.get("data") or {}).get("pk")
+            if not pk:
+                continue
+            ids[nome] = pk
+            mudou = True
+        d = _post_json("https://api.herascrape.com/users/%s/stories" % ids[nome], h, None, 60)
+        for it in ((d.get("data") or {}).get("items") or []):
+            video = bool(it.get("video_versions"))
+            img = (((it.get("image_versions2") or {}).get("candidates") or [{}])[0]).get("url")
+            cap = it.get("caption")
+            locs = [{"name": (sl.get("location") or {}).get("name")} for sl in (it.get("story_locations") or [])
+                    if (sl.get("location") or {}).get("name")]
+            tags = [str((x.get("hashtag") or {}).get("name") or "") for x in (it.get("story_hashtags") or [])]
+            out.append({"status": "success", "storyId": str(it.get("pk") or it.get("id") or ""), "username": nome,
+                        "postedAt": dt.datetime.fromtimestamp(it.get("taken_at") or 0, dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "mediaType": "video" if video else "image",
+                        "videoUrl": (it.get("video_versions") or [{}])[0].get("url") if video else None,
+                        "imageUrl": img, "mediaUrl": img,
+                        "caption": (cap.get("text") if isinstance(cap, dict) else cap) or "",
+                        "locations": locs, "hashtags": [t for t in tags if t]})
+    if mudou:
+        c.estado_gravar("herascrape_ids", ids)
+    return out
+
+
 def _texto_story(r):
     partes = [r.get("caption") or ""]
     partes += [("Local: " + (l.get("name") or l.get("title") or "")) for l in (r.get("locations") or []) if isinstance(l, dict)]
@@ -811,9 +848,9 @@ def _texto_story(r):
 
 
 def main_stories(cfg):
-    """Stories dos perfis prioritários (só o Apify lê story ativo no plano grátis). Com chuva confirmada a cada
-    intervalo_min; na calmaria a cada intervalo_calmaria_min (cobertura rala pra estourar cota, regra 27/11).
-    Teto de leituras por dia e por mês gravado no estado, pausa em 402/403/429. Story vira candidato igual post."""
+    """Stories dos perfis: leitor logado (aposentado 27/11) -> herascrape (saldo pre-pago) -> Apify (reserva).
+    Com chuva confirmada a cada intervalo_min; na calmaria a cada intervalo_calmaria_min. Teto de leituras por dia
+    e por mês/total gravado no estado, pausa em 402/403/429. Story vira candidato igual post."""
     st = cfg.get("servicos", {}).get("stories")
     chave = os.environ.get("APIFY_TOKEN")
     if not st or not chave:
@@ -853,24 +890,48 @@ def main_stories(cfg):
         if time.time() < u.get("pausa_ate", 0):
             print("stories: serviço em pausa")
             return 0
-        if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
-            c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))
-            return 0
-        u["ultimo"] = time.time()
-        u["usado"] += len(perfis)  # conta antes: se cair no meio, o gasto já está contado
-        u["dia_usado"] += len(perfis)
-        _salvar_uso(uso)
-        try:
-            linhas = _ler_stories_apify(perfis, chave)
-        except urllib.error.HTTPError as e:
-            if e.code in (401, 402, 403, 429):
-                u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
-                _salvar_uso(uso)
-            c.log_robo("robo1_instagram", False, "Stories (apify): HTTP %s" % e.code)
-            return 0
-        except Exception as e:
-            c.log_robo("robo1_instagram", False, "Stories (apify): %s %s" % (type(e).__name__, str(e)[:100]))
-            return 0
+        # herascrape primeiro (saldo pre-pago, ~10x mais barato que o Apify); Apify cobre se o hera falhar/pausar
+        uh = uso.setdefault("stories_hera", {})
+        if uh.get("dia") != dia:
+            uh.update(dia=dia, dia_usado=0)
+        chave_h = os.environ.get("HERASCRAPE_KEY")
+        hc = st.get("hera") or {}
+        if chave_h and hc.get("ativo", True) and time.time() >= uh.get("pausa_ate", 0) \
+                and uh.get("dia_usado", 0) + len(perfis) <= hc.get("teto_dia", 114) \
+                and uh.get("total", 0) + len(perfis) <= hc.get("teto_total", 2400):
+            u["ultimo"] = time.time()
+            uh["total"] = uh.get("total", 0) + len(perfis)
+            uh["dia_usado"] += len(perfis)
+            _salvar_uso(uso)
+            try:
+                linhas = _ler_stories_hera(perfis, chave_h)
+                via = "herascrape"
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 402, 403, 429):
+                    uh["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
+                    _salvar_uso(uso)
+                c.log_robo("robo1_instagram", False, "Stories (herascrape): HTTP %s, cai pro Apify" % e.code)
+            except Exception as e:
+                c.log_robo("robo1_instagram", False, "Stories (herascrape): %s %s, cai pro Apify" % (type(e).__name__, str(e)[:100]))
+        if linhas is None:
+            if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
+                c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))
+                return 0
+            u["ultimo"] = time.time()
+            u["usado"] += len(perfis)  # conta antes: se cair no meio, o gasto já está contado
+            u["dia_usado"] += len(perfis)
+            _salvar_uso(uso)
+            try:
+                linhas = _ler_stories_apify(perfis, chave)
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 402, 403, 429):
+                    u["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
+                    _salvar_uso(uso)
+                c.log_robo("robo1_instagram", False, "Stories (apify): HTTP %s" % e.code)
+                return 0
+            except Exception as e:
+                c.log_robo("robo1_instagram", False, "Stories (apify): %s %s" % (type(e).__name__, str(e)[:100]))
+                return 0
     limite = c.agora() - dt.timedelta(hours=c.JANELA_HORAS)
     lidos = novos = aprov = 0
     for r in linhas:
@@ -917,12 +978,18 @@ def main_stories(cfg):
         v["leituras"] += 1; v["perfis"] += len(conhecidos); v["certos"] += len(certos)
         v["falso_pos"] += len(falso_pos); v["falso_neg"] += len(falso_neg)
         _salvar_uso(uso)
-        c.log_robo("robo1_instagram", True, "Validação has_public_story: %d/%d perfis batem com o Apify (flag true sem story: %d, flag false com story: %d; com story agora: %d; acumulado %d/%d)" % (
+        c.log_robo("robo1_instagram", True, "Validação has_public_story: %d/%d perfis batem com a leitura real (flag true sem story: %d, flag false com story: %d; com story agora: %d; acumulado %d/%d)" % (
             len(certos), len(conhecidos), len(falso_pos), len(falso_neg), len(com_story), v["certos"], v["perfis"]))
     except Exception as e:
         print("validação flag falhou:", type(e).__name__, str(e)[:100])
-    c.log_robo("robo1_instagram", True, "Stories via %s: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (apify: dia %d/%d, mês %d/%d)" % (
-        via, len(perfis), lidos, novos, aprov, u.get("dia_usado", 0), st.get("teto_dia", 60), u.get("usado", 0), st.get("teto_mes", 800)))
+    if via == "herascrape":
+        uhx = (uso.get("stories_hera") or {})
+        gasto = "hera: dia %d/%d, total %d/%d" % (uhx.get("dia_usado", 0), (st.get("hera") or {}).get("teto_dia", 114),
+                                                 uhx.get("total", 0), (st.get("hera") or {}).get("teto_total", 2400))
+    else:
+        gasto = "apify: dia %d/%d, mês %d/%d" % (u.get("dia_usado", 0), st.get("teto_dia", 60), u.get("usado", 0), st.get("teto_mes", 800))
+    c.log_robo("robo1_instagram", True, "Stories via %s: %d perfis, %d stories recentes com texto, %d novos, %d aprovados pela IA (%s)" % (
+        via, len(perfis), lidos, novos, aprov, gasto))
     return 0
 
 
