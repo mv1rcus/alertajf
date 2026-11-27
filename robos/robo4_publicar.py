@@ -1,13 +1,8 @@
-"""ROBÔ 4: publica no site pela função pública ajf_submit (mesmas regras do formulário) e confere se a mídia abre."""
-import json, os, subprocess, sys, tempfile, time, uuid
+"""ROBÔ 4: publica no site pela função ajf_submit_robo (service_role, mesmas validações do formulário, teto próprio de 120/h) e confere se a mídia abre."""
+import json, os, subprocess, sys, tempfile
 import common as c
 
 AVISO = "Não verificado."
-
-
-def sessao_anonima():
-    d = c.http("POST", f"{c.SUPABASE_URL}/auth/v1/signup", {"apikey": c.PUBLISHABLE_KEY}, {"data": {"app": "alertajf-robo"}})
-    return d["access_token"]
 
 
 def limpar(txt):
@@ -87,12 +82,11 @@ def main():
         import robo3_baixar
         robo3_baixar.garantir_ffmpeg()
     try:
-        token = sessao_anonima()
         no_ar = publicados_agora()
-    except Exception as e:  # sem sessão não dá para publicar: falha visível, itens continuam na fila
-        c.log_robo("robo4_publicar", False, f"{len(itens)} na fila, nada publicado: sessão/lista pública falhou ({str(e)[:120]})")
+    except Exception as e:  # sem a lista pública não dá para conferir duplicata: falha visível, itens continuam na fila
+        c.log_robo("robo4_publicar", False, f"{len(itens)} na fila, nada publicado: lista pública falhou ({str(e)[:120]})")
         return 1
-    pub = falhas = desc = enviados = 0
+    pub = falhas = desc = 0
     for it in itens:
         try:
             a = it["analise"]
@@ -125,10 +119,7 @@ def main():
                     raise RuntimeError("vídeo não é H.264/AAC ou não abre; não publicado")
             payload = {"street": limpar(rua), "neighborhood": limpar(bairro), "kind": tipo,
                        "description": descricao(it, a), "lat": lat, "lng": lon, "observed_at": a["ocorrido_em"], "request_id": str(it["request_id"]), "media": midia}
-            if enviados:  # o ajf_submit aceita 1 relato por minuto por sessão: espera, nunca descarta por causa disso
-                time.sleep(62)
-            enviados += 1
-            rid = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit", {"apikey": c.PUBLISHABLE_KEY, "Authorization": f"Bearer {token}"}, {"payload": payload})
+            rid = c.http("POST", f"{c.SUPABASE_URL}/rest/v1/rpc/ajf_submit_robo", {"apikey": c.SERVICE_KEY, "Authorization": f"Bearer {c.SERVICE_KEY}"}, {"payload": payload})
             c.fila_atualizar(it["id"], estado="publicado", motivo=f"id={rid}")  # marca na hora: nunca republica o mesmo item
             if not any(r.get("id") == rid for r in publicados_agora()):
                 raise RuntimeError(f"enviado (id={rid}) mas não apareceu na lista pública")
