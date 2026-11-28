@@ -898,6 +898,7 @@ def main_stories(cfg):
             uh.update(dia=dia, dia_usado=0)
         chave_h = os.environ.get("HERASCRAPE_KEY")
         hc = st.get("hera") or {}
+        hera_falhou = False
         if chave_h and hc.get("ativo", True) and time.time() >= uh.get("pausa_ate", 0) \
                 and uh.get("dia_usado", 0) + len(perfis) <= hc.get("teto_dia", 114) \
                 and uh.get("total", 0) + len(perfis) <= hc.get("teto_total", 2400):
@@ -912,9 +913,15 @@ def main_stories(cfg):
                 if e.code in (401, 402, 403, 429):
                     uh["pausa_ate"] = time.time() + (24 if e.code != 429 else 1) * 3600
                     _salvar_uso(uso)
+                hera_falhou = True
                 c.log_robo("robo1_instagram", False, "Stories (herascrape): HTTP %s, cai pro Apify" % e.code)
             except Exception as e:
+                hera_falhou = True
                 c.log_robo("robo1_instagram", False, "Stories (herascrape): %s %s, cai pro Apify" % (type(e).__name__, str(e)[:100]))
+        if linhas is None and not hera_falhou and chave_h and hc.get("ativo", True) and time.time() >= uh.get("pausa_ate", 0):
+            # hera so ficou sem linhas porque bateu o teto (dia/total), nao por erro: nao gasta o Apify, que fica de reserva pra falha real
+            print("stories: teto do hera atingido, Apify guardado de reserva")
+            return 0
         if linhas is None:
             if u["dia_usado"] + len(perfis) > st.get("teto_dia", 60) or u["usado"] + len(perfis) > st.get("teto_mes", 800):
                 c.log_robo("robo1_instagram", True, "Stories: teto de leituras atingido (dia %d, mês %d), sem gastar" % (u["dia_usado"], u["usado"]))

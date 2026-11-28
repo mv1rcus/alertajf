@@ -128,7 +128,7 @@
       "intervalo_calmaria_min": 720,
       "hera": {
         "ativo": true,
-        "teto_dia": 114,
+        "teto_dia": 300,
         "teto_total": 2400
       }
     },
