@@ -58,7 +58,7 @@ export async function withdrawCommunityReport(reportId: string) {
 
 // Optional photo/video attached to a report, stored in the public relatos-midia bucket.
 const mediaExt: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heic', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
-export const mediaMaxBytes = 25 * 1024 * 1024;
+export const mediaMaxBytes = 8 * 1024 * 1024;
 export const videoMaxBytes = 7 * 1024 * 1024;
 export function reportMediaUrl(path: string) {
   return `${projectUrl}/storage/v1/object/public/relatos-midia/${path}`;
@@ -68,7 +68,7 @@ export async function uploadReportMedia(file: File, requestId: string): Promise<
   if (!ext) throw new ReportError('Formato não aceito. Envie foto (JPG, PNG, WebP ou HEIC) ou vídeo (MP4, MOV ou WebM).');
   const isVideo = file.type.startsWith('video/');
   if (isVideo && file.size > videoMaxBytes) throw new ReportError('O vídeo passa de 7 MB. Envie um vídeo mais curto ou uma foto.');
-  if (!isVideo && file.size > mediaMaxBytes) throw new ReportError('A foto passa de 25 MB. Envie uma imagem menor.');
+  if (!isVideo && file.size > mediaMaxBytes) throw new ReportError('A foto passa de 8 MB. Envie uma imagem menor.');
   const token = await session();
   const path = `r/${requestId}-1.${ext}`;
   let r: Response;
